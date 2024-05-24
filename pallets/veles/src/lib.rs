@@ -55,16 +55,16 @@ pub struct CFReportInfo<AccountIdOf, MomentOf> {
 #[derive(Encode, Decode, Default, PartialEq, Eq, scale_info::TypeInfo)]
 #[cfg_attr(feature = "std", derive(Debug))]
 pub struct PProposalInfo<AccountIdOf, MomentOf> {
-	 // Project Owner
-	 project_owner: AccountIdOf,
-     // Creation date
-	 creation_date: MomentOf,
-	 // Project hash 
-	 project_hash: H256,
-	 // Votes for
-	 votes_for: BTreeSet<AccountIdOf>,
-	 // Votes against
-	 votes_against: BTreeSet<AccountIdOf>,
+	// Project Owner
+	project_owner: AccountIdOf,
+	// Creation date
+	creation_date: MomentOf,
+	// Project hash
+	project_hash: H256,
+	// Votes for
+	votes_for: BTreeSet<AccountIdOf>,
+	// Votes against
+	votes_against: BTreeSet<AccountIdOf>,
 }
 
 // Penalty level structure for carbon footprint
@@ -136,13 +136,8 @@ pub mod pallet {
 	// Carbon Footprint accounts
 	#[pallet::storage]
 	#[pallet::getter(fn carbon_footprint_accounts)]
-	pub(super) type CarbonFootprintAccounts<T: Config> = StorageMap<
-		_,
-		Identity,
-		AccountIdOf<T>,
-		CFAInfo<MomentOf<T>, T::IPFSLength>,
-		OptionQuery,
-	>;
+	pub(super) type CarbonFootprintAccounts<T: Config> =
+		StorageMap<_, Identity, AccountIdOf<T>, CFAInfo<MomentOf<T>, T::IPFSLength>, OptionQuery>;
 
 	// Trader accounts
 	#[pallet::storage]
@@ -153,24 +148,14 @@ pub mod pallet {
 	// Project Validator accounts
 	#[pallet::storage]
 	#[pallet::getter(fn project_validators)]
-	pub(super) type ProjectValidators<T: Config> = StorageMap<
-		_,
-		Identity,
-		AccountIdOf<T>,
-		PVoPOInfo<MomentOf<T>, T::IPFSLength>,
-		OptionQuery,
-	>;
+	pub(super) type ProjectValidators<T: Config> =
+		StorageMap<_, Identity, AccountIdOf<T>, PVoPOInfo<MomentOf<T>, T::IPFSLength>, OptionQuery>;
 
 	// Project Owner accounts
 	#[pallet::storage]
 	#[pallet::getter(fn project_owners)]
-	pub(super) type ProjectOwners<T: Config> = StorageMap<
-		_,
-		Identity,
-		AccountIdOf<T>,
-		PVoPOInfo<MomentOf<T>, T::IPFSLength>,
-		OptionQuery,
-	>;
+	pub(super) type ProjectOwners<T: Config> =
+		StorageMap<_, Identity, AccountIdOf<T>, PVoPOInfo<MomentOf<T>, T::IPFSLength>, OptionQuery>;
 
 	// Penalty timeouts
 	#[pallet::storage]
@@ -181,24 +166,14 @@ pub mod pallet {
 	// Carbon deficit reports
 	#[pallet::storage]
 	#[pallet::getter(fn carbon_deficit_reports)]
-	pub(super) type CarbonDeficitReports<T: Config> = StorageMap<
-		_,
-		Identity,
-		IPFSHash,
-		CFReportInfo<AccountIdOf<T>, MomentOf<T>>,
-		OptionQuery,
-	>;
+	pub(super) type CarbonDeficitReports<T: Config> =
+		StorageMap<_, Identity, IPFSHash, CFReportInfo<AccountIdOf<T>, MomentOf<T>>, OptionQuery>;
 
 	// Projects proposals
 	#[pallet::storage]
-    #[pallet::getter(fn project_proposals)]
-    pub(super) type ProjectProposals<T: Config> = StorageMap<
-        _,
-        Identity,
-		IPFSHash, 
-		PProposalInfo<AccountIdOf<T>, MomentOf<T>>,
-        OptionQuery,
-    >;
+	#[pallet::getter(fn project_proposals)]
+	pub(super) type ProjectProposals<T: Config> =
+		StorageMap<_, Identity, IPFSHash, PProposalInfo<AccountIdOf<T>, MomentOf<T>>, OptionQuery>;
 
 	#[pallet::event]
 	#[pallet::generate_deposit(pub (super) fn deposit_event)]
@@ -218,7 +193,7 @@ pub mod pallet {
 		/// Vote already submitted
 		VoteAlreadySubmitted,
 		/// Project proposal already exists
-		ProjectProposalAlreadyExists
+		ProjectProposalAlreadyExists,
 	}
 
 	#[pallet::call]
@@ -272,19 +247,19 @@ pub mod pallet {
 		// Propose project
 		#[pallet::call_index(1)]
 		#[pallet::weight(0)]
-		pub fn propose_project(
-			origin: OriginFor<T>,
-			ipfs: IPFSHash,			
-		) -> DispatchResultWithPostInfo {
+		pub fn propose_project(origin: OriginFor<T>, ipfs: IPFSHash) -> DispatchResultWithPostInfo {
 			let who = ensure_signed(origin)?;
 
 			// Check if caller is Project Owner account
 			ensure!(ProjectOwners::<T>::contains_key(who.clone()), Error::<T>::NotAuthorized);
 
-            // Ensure project does not exist
-            ensure!(!ProjectProposals::<T>::contains_key(ipfs), Error::<T>::ProjectProposalAlreadyExists);
+			// Ensure project does not exist
+			ensure!(
+				!ProjectProposals::<T>::contains_key(ipfs),
+				Error::<T>::ProjectProposalAlreadyExists
+			);
 
-			// Get time 
+			// Get time
 			let creation_date = T::Time::now();
 
 			// Project Proposal info
@@ -294,14 +269,14 @@ pub mod pallet {
 				project_hash: ipfs,
 				votes_for: BTreeSet::<AccountIdOf<T>>::new(),
 				votes_against: BTreeSet::<AccountIdOf<T>>::new(),
-		   };
+			};
 
-		   // Write to a storage
-		   ProjectProposals::<T>::insert(ipfs, project_proposal_info);
+			// Write to a storage
+			ProjectProposals::<T>::insert(ipfs, project_proposal_info);
 
-           Self::deposit_event(Event::ProjectProposalCreated(who.clone(), ipfs));
+			Self::deposit_event(Event::ProjectProposalCreated(who.clone(), ipfs));
 
-           Ok(().into())
+			Ok(().into())
 		}
 	}
 }
