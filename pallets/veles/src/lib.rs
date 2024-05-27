@@ -75,6 +75,14 @@ pub struct PenaltyLevelConfig {
 	pub base: i32, // Balance
 }
 
+// Vote type enum
+#[derive(Encode, Decode, PartialEq, Eq, scale_info::TypeInfo, Clone)]
+#[cfg_attr(feature = "std", derive(Debug))]
+pub enum VoteType {
+	CdrVote,
+	ProposalVote,
+}
+
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
@@ -194,15 +202,20 @@ pub mod pallet {
 		VoteAlreadySubmitted,
 		/// Project proposal already exists
 		ProjectProposalAlreadyExists,
+		/// Project Proposal not found
+		ProjectProposalNotFound,
+		/// Wrong vote type
+		WrongVoteType,
 	}
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
-		// Vote for/against Carbon Deficit Reports
+		// Vote for/against Carbon Deficit Reports or for/against project Proposals
 		#[pallet::call_index(0)]
 		#[pallet::weight(0)]
-		pub fn cdr_vote(
+		pub fn cast_vote(
 			origin: OriginFor<T>,
+			vote_type: VoteType,
 			ipfs: IPFSHash,
 			vote: bool,
 		) -> DispatchResultWithPostInfo {
@@ -211,35 +224,51 @@ pub mod pallet {
 			// Check if caller is Project Validator account
 			ensure!(ProjectValidators::<T>::contains_key(who.clone()), Error::<T>::NotAuthorized);
 
-			// Check if report exists
-			ensure!(CarbonDeficitReports::<T>::contains_key(ipfs), Error::<T>::ReportNotFound);
+			match vote_type {
+				VoteType::CdrVote => {
+					// Get report info and return error if it does not exist
+					let mut report =
+						CarbonDeficitReports::<T>::get(ipfs).ok_or(Error::<T>::ReportNotFound)?;
 
-			// Get report info
-			let report = CarbonDeficitReports::<T>::get(ipfs);
+					// Check if vote already exists
+					ensure!(
+						!report.votes_for.contains(&who) && !report.votes_against.contains(&who),
+						Error::<T>::VoteAlreadySubmitted
+					);
 
-			// If report_info exists submit vote
-			if report.is_some() {
-				let mut report_info = report.unwrap();
-				// Check if vote already exists
-				ensure!(
-					!report_info.votes_for.contains(&who)
-						&& !report_info.votes_against.contains(&who),
-					Error::<T>::VoteAlreadySubmitted
-				);
+					if vote {
+						report.votes_for.insert(who.clone());
+					} else {
+						report.votes_against.insert(who.clone());
+					};
 
-				if vote {
-					report_info.votes_for.insert(who.clone());
-				} else {
-					report_info.votes_against.insert(who.clone());
-				};
+					CarbonDeficitReports::<T>::insert(ipfs, report);
+				},
+				VoteType::ProposalVote => {
+					// Get report info or return error if it does not exist
+					let mut report = ProjectProposals::<T>::get(ipfs)
+						.ok_or(Error::<T>::ProjectProposalNotFound)?;
 
-				// Write to a storage
-				CarbonDeficitReports::<T>::insert(ipfs, report_info);
+					// Check if vote already exists
+					ensure!(
+						!report.votes_for.contains(&who) && !report.votes_against.contains(&who),
+						Error::<T>::VoteAlreadySubmitted
+					);
 
-				Self::deposit_event(Event::SuccessfulVote(who.clone(), ipfs));
-			} else {
-				return Err(Error::<T>::ReportNotFound.into());
+					if vote {
+						report.votes_for.insert(who.clone());
+					} else {
+						report.votes_against.insert(who.clone());
+					};
+
+					ProjectProposals::<T>::insert(ipfs, report);
+				},
+				_ => {
+					return Err(Error::<T>::WrongVoteType.into());
+				},
 			}
+
+			Self::deposit_event(Event::SuccessfulVote(who.clone(), ipfs));
 
 			Ok(().into())
 		}
