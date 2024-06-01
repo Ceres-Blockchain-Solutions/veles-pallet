@@ -4,9 +4,8 @@ use frame_support::{assert_err, assert_ok};
 #[test]
 fn cast_vote_unauthorized() {
 	new_test_ext().execute_with(|| {
-		// Create CFReport IPFS link
-		let ipfs_cfr_documentation =
-			BoundedString::<IPFSLength>::truncate_from("ipfs_cfr_documentation");
+		// Create IPFS documentation link
+		let ipfs_documentation = BoundedString::<IPFSLength>::truncate_from("ipfs_documentation");
 
 		// Go past genesis block so events get deposited
 		System::set_block_number(1);
@@ -16,7 +15,7 @@ fn cast_vote_unauthorized() {
 			Veles::cast_vote(
 				RuntimeOrigin::signed(alice()),
 				VoteType::CFReportVote,
-				ipfs_cfr_documentation.clone(),
+				ipfs_documentation.clone(),
 				false
 			),
 			Error::<Test>::Unauthorized
@@ -26,7 +25,7 @@ fn cast_vote_unauthorized() {
 			Veles::cast_vote(
 				RuntimeOrigin::signed(alice()),
 				VoteType::PProposalVote,
-				ipfs_cfr_documentation.clone(),
+				ipfs_documentation.clone(),
 				false
 			),
 			Error::<Test>::Unauthorized
@@ -36,7 +35,7 @@ fn cast_vote_unauthorized() {
 			Veles::cast_vote(
 				RuntimeOrigin::signed(alice()),
 				VoteType::CCBatchVote,
-				ipfs_cfr_documentation.clone(),
+				ipfs_documentation.clone(),
 				false
 			),
 			Error::<Test>::Unauthorized
@@ -45,15 +44,17 @@ fn cast_vote_unauthorized() {
 }
 
 #[test]
-fn cast_vote_cfreport_report_not_found() {
+fn cast_vote_cf_report_report_not_found() {
 	new_test_ext().execute_with(|| {
-		// Create CFReport IPFS link
-		let ipfs_cfr_documentation =
-			BoundedString::<IPFSLength>::truncate_from("ipfs_cfr_documentation");
+		// Create CF report IPFS link
+		let ipfs_cfreport_documentation =
+			BoundedString::<IPFSLength>::truncate_from("ipfs_cfreport_documentation");
 
-		// Create Project validator info
-		let pv_info = PVoPOInfo {
-			documentation_ipfs: BoundedString::<IPFSLength>::truncate_from("ipfs_pv_documentation"),
+		// Create project validator info
+		let pvalidator_info = PVoPOInfo {
+			documentation_ipfs: BoundedString::<IPFSLength>::truncate_from(
+				"ipfs_pvalidator_documentation",
+			),
 			penalty_level: 0,
 			penalty_timeout: 0,
 		};
@@ -62,14 +63,14 @@ fn cast_vote_cfreport_report_not_found() {
 		System::set_block_number(1);
 
 		// Insert project validator
-		ProjectValidators::<Test>::insert(alice(), pv_info);
+		ProjectValidators::<Test>::insert(alice(), pvalidator_info);
 
 		// Check for CFReportNotFound error
 		assert_err!(
 			Veles::cast_vote(
 				RuntimeOrigin::signed(alice()),
 				VoteType::CFReportVote,
-				ipfs_cfr_documentation,
+				ipfs_cfreport_documentation,
 				false
 			),
 			Error::<Test>::CFReportNotFound
@@ -78,21 +79,23 @@ fn cast_vote_cfreport_report_not_found() {
 }
 
 #[test]
-fn cast_vote_cfreport_vote_ok() {
+fn cast_vote_cfreport_ok() {
 	new_test_ext().execute_with(|| {
-		// Create CFReport IPFS link
-		let ipfs_cfr_documentation =
-			BoundedString::<IPFSLength>::truncate_from("ipfs_cfr_documentation");
+		// Create CF report IPFS link
+		let ipfs_cfreport_documentation =
+			BoundedString::<IPFSLength>::truncate_from("ipfs_cfreport_documentation");
 
-		// Create Project validator info
-		let pv_info = PVoPOInfo {
-			documentation_ipfs: BoundedString::<IPFSLength>::truncate_from("ipfs_pv_documentation"),
+		// Create project validator info
+		let pvalidator_info = PVoPOInfo {
+			documentation_ipfs: BoundedString::<IPFSLength>::truncate_from(
+				"ipfs_pvalidator_documentation",
+			),
 			penalty_level: 0,
 			penalty_timeout: 0,
 		};
 
-		// Create Carbon footprint info
-		let cfr_info = CFReportInfo {
+		// Create CF report info
+		let cfreport_info = CFReportInfo {
 			cf_account: bob(),
 			creation_date: 0,
 			carbon_deficit: 0,
@@ -104,16 +107,16 @@ fn cast_vote_cfreport_vote_ok() {
 		System::set_block_number(1);
 
 		// Insert project validator
-		ProjectValidators::<Test>::insert(alice(), pv_info);
+		ProjectValidators::<Test>::insert(alice(), pvalidator_info);
 
-		// Insert carbon footprint report
-		CFReports::<Test>::insert(ipfs_cfr_documentation.clone(), cfr_info);
+		// Insert CF report
+		CFReports::<Test>::insert(ipfs_cfreport_documentation.clone(), cfreport_info);
 
 		// Vote succesfully
 		assert_ok!(Veles::cast_vote(
 			RuntimeOrigin::signed(alice()),
 			VoteType::CFReportVote,
-			ipfs_cfr_documentation.clone(),
+			ipfs_cfreport_documentation.clone(),
 			false
 		));
 	});
@@ -122,19 +125,21 @@ fn cast_vote_cfreport_vote_ok() {
 #[test]
 fn cast_vote_cfreport_vote_already_submitted() {
 	new_test_ext().execute_with(|| {
-		// Create CFReport IPFS link
-		let ipfs_cfr_documentation =
-			BoundedString::<IPFSLength>::truncate_from("ipfs_cfr_documentation");
+		// Create CF report IPFS link
+		let ipfs_cfreport_documentation =
+			BoundedString::<IPFSLength>::truncate_from("ipfs_cfreport_documentation");
 
-		// Create Project validator info
-		let pv_info = PVoPOInfo {
-			documentation_ipfs: BoundedString::<IPFSLength>::truncate_from("ipfs_pv_documentation"),
+		// Create project validator info
+		let pvalidator_info = PVoPOInfo {
+			documentation_ipfs: BoundedString::<IPFSLength>::truncate_from(
+				"ipfs_pvalidator_documentation",
+			),
 			penalty_level: 0,
 			penalty_timeout: 0,
 		};
 
-		// Create Carbon footprint info
-		let cfr_info = CFReportInfo {
+		// Create CF info
+		let cfreport_info = CFReportInfo {
 			cf_account: bob(),
 			creation_date: 0,
 			carbon_deficit: 0,
@@ -146,16 +151,16 @@ fn cast_vote_cfreport_vote_already_submitted() {
 		System::set_block_number(1);
 
 		// Insert project validator
-		ProjectValidators::<Test>::insert(alice(), pv_info);
+		ProjectValidators::<Test>::insert(alice(), pvalidator_info);
 
-		// Insert carbon footprint report
-		CFReports::<Test>::insert(ipfs_cfr_documentation.clone(), cfr_info);
+		// Insert CF report
+		CFReports::<Test>::insert(ipfs_cfreport_documentation.clone(), cfreport_info);
 
 		// Vote succesfully
 		assert_ok!(Veles::cast_vote(
 			RuntimeOrigin::signed(alice()),
 			VoteType::CFReportVote,
-			ipfs_cfr_documentation.clone(),
+			ipfs_cfreport_documentation.clone(),
 			false
 		));
 
@@ -164,7 +169,157 @@ fn cast_vote_cfreport_vote_already_submitted() {
 			Veles::cast_vote(
 				RuntimeOrigin::signed(alice()),
 				VoteType::CFReportVote,
-				ipfs_cfr_documentation,
+				ipfs_cfreport_documentation,
+				false
+			),
+			Error::<Test>::VoteAlreadySubmitted
+		);
+	});
+}
+
+#[test]
+fn cast_vote_pproposal_project_proposal_not_found() {
+	new_test_ext().execute_with(|| {
+		// Create project proposal IPFS link
+		let ipfs_project_proposal_documentation =
+			BoundedString::<IPFSLength>::truncate_from("ipfs_project_proposal_documentation");
+
+		// Create project validator info
+		let project_validator_info = PVoPOInfo {
+			documentation_ipfs: BoundedString::<IPFSLength>::truncate_from(
+				"ipfs_project_validator_documentation",
+			),
+			penalty_level: 0,
+			penalty_timeout: 0,
+		};
+
+		// Go past genesis block so events get deposited
+		System::set_block_number(1);
+
+		// Insert project validator
+		ProjectValidators::<Test>::insert(alice(), project_validator_info);
+
+		// Check for ProjectProposalNotFound error
+		assert_err!(
+			Veles::cast_vote(
+				RuntimeOrigin::signed(alice()),
+				VoteType::PProposalVote,
+				ipfs_project_proposal_documentation,
+				false
+			),
+			Error::<Test>::ProjectProposalNotFound
+		);
+	});
+}
+
+#[test]
+fn cast_vote_pproposal_vote_ok() {
+	new_test_ext().execute_with(|| {
+		// Create project proposal IPFS link
+		let ipfs_project_proposal_documentation =
+			BoundedString::<IPFSLength>::truncate_from("ipfs_project_proposal_documentation");
+
+		// Create project validator info
+		let project_validator_info = PVoPOInfo {
+			documentation_ipfs: BoundedString::<IPFSLength>::truncate_from(
+				"ipfs_project_validator_documentation",
+			),
+			penalty_level: 0,
+			penalty_timeout: 0,
+		};
+
+		// Create project hash
+		let nonce = frame_system::Pallet::<Test>::account_nonce(alice());
+		let encoded: [u8; 32] = (alice(), nonce).using_encoded(blake2_256);
+		let project_hash = H256::from(encoded);
+
+		// Create project proposal info
+		let project_proposal_info = ProjectProposalInfo {
+			project_owner: bob(),
+			creation_date: 0,
+			project_hash,
+			votes_for: BTreeSet::<AccountId>::new(),
+			votes_against: BTreeSet::<AccountId>::new(),
+		};
+
+		// Go past genesis block so events get deposited
+		System::set_block_number(1);
+
+		// Insert project validator
+		ProjectValidators::<Test>::insert(alice(), project_validator_info);
+
+		// Insert project proposal info
+		ProjectProposals::<Test>::insert(
+			ipfs_project_proposal_documentation.clone(),
+			project_proposal_info,
+		);
+
+		// Vote succesfully
+		assert_ok!(Veles::cast_vote(
+			RuntimeOrigin::signed(alice()),
+			VoteType::PProposalVote,
+			ipfs_project_proposal_documentation,
+			false
+		));
+	});
+}
+
+#[test]
+fn cast_vote_pproposal_vote_already_submitted() {
+	new_test_ext().execute_with(|| {
+		// Create project proposal IPFS link
+		let ipfs_project_proposal_documentation =
+			BoundedString::<IPFSLength>::truncate_from("ipfs_project_proposal_documentation");
+
+		// Create project validator info
+		let project_validator_info = PVoPOInfo {
+			documentation_ipfs: BoundedString::<IPFSLength>::truncate_from(
+				"ipfs_project_validator_documentation",
+			),
+			penalty_level: 0,
+			penalty_timeout: 0,
+		};
+
+		// Create project hash
+		let nonce = frame_system::Pallet::<Test>::account_nonce(alice());
+		let encoded: [u8; 32] = (alice(), nonce).using_encoded(blake2_256);
+		let project_hash = H256::from(encoded);
+
+		// Create project proposal info
+		let project_proposal_info = ProjectProposalInfo {
+			project_owner: bob(),
+			creation_date: 0,
+			project_hash,
+			votes_for: BTreeSet::<AccountId>::new(),
+			votes_against: BTreeSet::<AccountId>::new(),
+		};
+
+		// Go past genesis block so events get deposited
+		System::set_block_number(1);
+
+		// Insert project validator
+		ProjectValidators::<Test>::insert(alice(), project_validator_info);
+
+		// Insert project proposal info
+		ProjectProposals::<Test>::insert(
+			ipfs_project_proposal_documentation.clone(),
+			project_proposal_info,
+		);
+
+		// Vote succesfully
+		assert_ok!(Veles::cast_vote(
+			RuntimeOrigin::signed(alice()),
+			VoteType::PProposalVote,
+			ipfs_project_proposal_documentation.clone(),
+			false
+		));
+
+		// Check for VoteAlreadySubmitted error
+		assert_err!(
+			Veles::cast_vote(
+				RuntimeOrigin::signed(alice()),
+				VoteType::PProposalVote,
+				ipfs_project_proposal_documentation,
 				false
 			),
 			Error::<Test>::VoteAlreadySubmitted

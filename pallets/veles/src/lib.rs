@@ -62,7 +62,7 @@ pub struct CFReportInfo<AccountIdOf, MomentOf> {
 // Project Proposal info structure
 #[derive(Encode, Decode, Clone, Default, PartialEq, Eq, scale_info::TypeInfo)]
 #[cfg_attr(feature = "std", derive(Debug))]
-pub struct PProposalInfo<AccountIdOf, MomentOf> {
+pub struct ProjectProposalInfo<AccountIdOf, MomentOf> {
 	// Project owner
 	project_owner: AccountIdOf,
 	// Creation date
@@ -262,7 +262,7 @@ pub mod pallet {
 		_,
 		Identity,
 		BoundedString<T::IPFSLength>,
-		PProposalInfo<AccountIdOf<T>, MomentOf<T>>,
+		ProjectProposalInfo<AccountIdOf<T>, MomentOf<T>>,
 		OptionQuery,
 	>;
 
@@ -345,23 +345,24 @@ pub mod pallet {
 					CFReports::<T>::insert(ipfs.clone(), report);
 				},
 				VoteType::PProposalVote => {
-					// Get report info or return error if it does not exist
-					let mut report = ProjectProposals::<T>::get(ipfs.clone())
+					// Get proposal info or return error if it does not exist
+					let mut proposal = ProjectProposals::<T>::get(ipfs.clone())
 						.ok_or(Error::<T>::ProjectProposalNotFound)?;
 
 					// Check if vote already exists
 					ensure!(
-						!report.votes_for.contains(&user) && !report.votes_against.contains(&user),
+						!proposal.votes_for.contains(&user)
+							&& !proposal.votes_against.contains(&user),
 						Error::<T>::VoteAlreadySubmitted
 					);
 
 					if vote {
-						report.votes_for.insert(user.clone());
+						proposal.votes_for.insert(user.clone());
 					} else {
-						report.votes_against.insert(user.clone());
+						proposal.votes_against.insert(user.clone());
 					};
 
-					ProjectProposals::<T>::insert(ipfs.clone(), report);
+					ProjectProposals::<T>::insert(ipfs.clone(), proposal);
 				},
 				VoteType::CCBatchVote => {
 					// Get carbon credit batch proposal info or return error if it does not exist
@@ -416,7 +417,7 @@ pub mod pallet {
 			let project_hash = H256::from(encoded);
 
 			// Project Proposal info
-			let project_proposal_info = PProposalInfo {
+			let project_proposal_info = ProjectProposalInfo {
 				project_owner: user.clone(),
 				creation_date,
 				project_hash,
