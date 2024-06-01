@@ -122,6 +122,7 @@ pub struct PenaltyLevelConfig {
 pub enum VoteType {
 	CDRVote,
 	ProposalVote,
+	CCBVote,
 }
 
 #[frame_support::pallet]
