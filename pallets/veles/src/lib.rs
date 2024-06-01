@@ -4,7 +4,7 @@ pub use codec::{Decode, Encode};
 pub use common::BoundedString;
 pub use frame_support::pallet_prelude::Get;
 pub use pallet::*;
-pub use sp_core::H256;
+pub use sp_core::{blake2_256, H256};
 pub use sp_std::collections::btree_set::BTreeSet;
 
 // This module contains a mock runtime specific for testing this pallet's functionality.
@@ -20,13 +20,13 @@ mod tests;
 #[derive(Encode, Decode, Default, PartialEq, Eq, scale_info::TypeInfo)]
 #[cfg_attr(feature = "std", derive(Debug))]
 #[scale_info(skip_type_params(IPFSLength))]
-pub struct PVoPOInfo<MomentOf, IPFSLength: Get<u32>> {
+pub struct PVoPOInfo<IPFSLength: Get<u32>, BlockNumber> {
 	// IPFS link to PV/PO documentation
 	documentation_ipfs: BoundedString<IPFSLength>,
 	// Penalty level
 	penalty_level: u8,
 	// Penalty timeout
-	penalty_timeout: MomentOf,
+	penalty_timeout: BlockNumber,
 }
 
 // Carbon Footprint account data structure
@@ -45,7 +45,6 @@ pub struct CFAInfo<MomentOf, IPFSLength: Get<u32>> {
 // Carbon Footprint report data structure
 #[derive(Encode, Decode, Default, PartialEq, Eq, scale_info::TypeInfo)]
 #[cfg_attr(feature = "std", derive(Debug))]
-#[scale_info(skip_type_params(IPFSLength))]
 pub struct CFReportInfo<AccountIdOf, MomentOf> {
 	// Account
 	account_id: AccountIdOf,
@@ -75,11 +74,26 @@ pub struct PProposalInfo<AccountIdOf, MomentOf> {
 	votes_against: BTreeSet<AccountIdOf>,
 }
 
+// Projects info structure
+#[derive(Encode, Decode, Clone, Default, PartialEq, Eq, scale_info::TypeInfo)]
+#[cfg_attr(feature = "std", derive(Debug))]
+#[scale_info(skip_type_params(IPFSLength))]
+pub struct ProjectInfo<IPFSLength: Get<u32>, MomentOf, BlockNumber> {
+	// IPFS link to CFA documentation
+	documentation_ipfs: BoundedString<IPFSLength>,
+	// Creation date
+	creation_date: MomentOf,
+	// Penalty level
+	penalty_level: u8,
+	// Penalty timeout
+	penalty_timeout: BlockNumber,
+}
+
 // Penalty level structure for carbon footprint
 #[derive(Encode, Decode, Default, PartialEq, Eq, scale_info::TypeInfo)]
 #[cfg_attr(feature = "std", derive(Debug))]
 pub struct PenaltyLevelConfig {
-	pub level: u8,
+	pub level: u8, // Penalty level
 	pub base: i32, // Balance
 }
 
@@ -87,7 +101,7 @@ pub struct PenaltyLevelConfig {
 #[derive(Encode, Decode, PartialEq, Eq, scale_info::TypeInfo, Clone)]
 #[cfg_attr(feature = "std", derive(Debug))]
 pub enum VoteType {
-	CdrVote,
+	CDRVote,
 	ProposalVote,
 }
 
@@ -119,7 +133,7 @@ pub mod pallet {
 	/// Pallet types and constants
 	type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
 	type MomentOf<T> = <<T as Config>::Time as Time>::Moment;
-	type IPFSHash = H256;
+	type BlockNumber<T> = BlockNumberFor<T>;
 
 	/// Helper functions
 	// Default authority accounts
@@ -164,40 +178,71 @@ pub mod pallet {
 	// Project Validator accounts
 	#[pallet::storage]
 	#[pallet::getter(fn project_validators)]
-	pub(super) type ProjectValidators<T: Config> =
-		StorageMap<_, Identity, AccountIdOf<T>, PVoPOInfo<MomentOf<T>, T::IPFSLength>, OptionQuery>;
+	pub(super) type ProjectValidators<T: Config> = StorageMap<
+		_,
+		Identity,
+		AccountIdOf<T>,
+		PVoPOInfo<T::IPFSLength, BlockNumber<T>>,
+		OptionQuery,
+	>;
 
 	// Project Owner accounts
 	#[pallet::storage]
 	#[pallet::getter(fn project_owners)]
-	pub(super) type ProjectOwners<T: Config> =
-		StorageMap<_, Identity, AccountIdOf<T>, PVoPOInfo<MomentOf<T>, T::IPFSLength>, OptionQuery>;
+	pub(super) type ProjectOwners<T: Config> = StorageMap<
+		_,
+		Identity,
+		AccountIdOf<T>,
+		PVoPOInfo<T::IPFSLength, BlockNumber<T>>,
+		OptionQuery,
+	>;
+
+	// Projects
+	#[pallet::storage]
+	#[pallet::getter(fn projects)]
+	pub(super) type Projects<T: Config> = StorageMap<
+		_,
+		Identity,
+		H256,
+		ProjectInfo<T::IPFSLength, MomentOf<T>, BlockNumber<T>>,
+		OptionQuery,
+	>;
 
 	// Penalty timeouts
 	#[pallet::storage]
 	#[pallet::getter(fn penalty_timeouts)]
 	pub(super) type PenaltyTimeouts<T: Config> =
-		StorageMap<_, Identity, MomentOf<T>, BTreeSet<AccountIdOf<T>>, OptionQuery>;
+		StorageMap<_, Identity, BlockNumber<T>, BTreeSet<AccountIdOf<T>>, OptionQuery>;
 
 	// Carbon deficit reports
 	#[pallet::storage]
 	#[pallet::getter(fn carbon_deficit_reports)]
-	pub(super) type CarbonDeficitReports<T: Config> =
-		StorageMap<_, Identity, IPFSHash, CFReportInfo<AccountIdOf<T>, MomentOf<T>>, OptionQuery>;
+	pub(super) type CarbonDeficitReports<T: Config> = StorageMap<
+		_,
+		Identity,
+		BoundedString<T::IPFSLength>,
+		CFReportInfo<AccountIdOf<T>, MomentOf<T>>,
+		OptionQuery,
+	>;
 
 	// Projects proposals
 	#[pallet::storage]
 	#[pallet::getter(fn project_proposals)]
-	pub(super) type ProjectProposals<T: Config> =
-		StorageMap<_, Identity, IPFSHash, PProposalInfo<AccountIdOf<T>, MomentOf<T>>, OptionQuery>;
+	pub(super) type ProjectProposals<T: Config> = StorageMap<
+		_,
+		Identity,
+		BoundedString<T::IPFSLength>,
+		PProposalInfo<AccountIdOf<T>, MomentOf<T>>,
+		OptionQuery,
+	>;
 
 	#[pallet::event]
 	#[pallet::generate_deposit(pub (super) fn deposit_event)]
 	pub enum Event<T: Config> {
 		/// Successful Vote
-		SuccessfulVote(AccountIdOf<T>, IPFSHash),
+		SuccessfulVote(AccountIdOf<T>, BoundedString<T::IPFSLength>),
 		/// Successful Project Proposal
-		ProjectProposalCreated(AccountIdOf<T>, IPFSHash),
+		ProjectProposalCreated(AccountIdOf<T>, BoundedString<T::IPFSLength>),
 	}
 
 	#[pallet::error]
@@ -224,59 +269,56 @@ pub mod pallet {
 		pub fn cast_vote(
 			origin: OriginFor<T>,
 			vote_type: VoteType,
-			ipfs: IPFSHash,
+			ipfs: BoundedString<T::IPFSLength>,
 			vote: bool,
 		) -> DispatchResultWithPostInfo {
-			let who = ensure_signed(origin)?;
+			let user = ensure_signed(origin)?;
 
 			// Check if caller is Project Validator account
-			ensure!(ProjectValidators::<T>::contains_key(who.clone()), Error::<T>::NotAuthorized);
+			ensure!(ProjectValidators::<T>::contains_key(user.clone()), Error::<T>::NotAuthorized);
 
 			match vote_type {
-				VoteType::CdrVote => {
+				VoteType::CDRVote => {
 					// Get report info and return error if it does not exist
-					let mut report =
-						CarbonDeficitReports::<T>::get(ipfs).ok_or(Error::<T>::ReportNotFound)?;
+					let mut report = CarbonDeficitReports::<T>::get(ipfs.clone())
+						.ok_or(Error::<T>::ReportNotFound)?;
 
 					// Check if vote already exists
 					ensure!(
-						!report.votes_for.contains(&who) && !report.votes_against.contains(&who),
+						!report.votes_for.contains(&user) && !report.votes_against.contains(&user),
 						Error::<T>::VoteAlreadySubmitted
 					);
 
 					if vote {
-						report.votes_for.insert(who.clone());
+						report.votes_for.insert(user.clone());
 					} else {
-						report.votes_against.insert(who.clone());
+						report.votes_against.insert(user.clone());
 					};
 
-					CarbonDeficitReports::<T>::insert(ipfs, report);
+					CarbonDeficitReports::<T>::insert(ipfs.clone(), report);
 				},
 				VoteType::ProposalVote => {
 					// Get report info or return error if it does not exist
-					let mut report = ProjectProposals::<T>::get(ipfs)
+					let mut report = ProjectProposals::<T>::get(ipfs.clone())
 						.ok_or(Error::<T>::ProjectProposalNotFound)?;
 
 					// Check if vote already exists
 					ensure!(
-						!report.votes_for.contains(&who) && !report.votes_against.contains(&who),
+						!report.votes_for.contains(&user) && !report.votes_against.contains(&user),
 						Error::<T>::VoteAlreadySubmitted
 					);
 
 					if vote {
-						report.votes_for.insert(who.clone());
+						report.votes_for.insert(user.clone());
 					} else {
-						report.votes_against.insert(who.clone());
+						report.votes_against.insert(user.clone());
 					};
 
-					ProjectProposals::<T>::insert(ipfs, report);
-				},
-				_ => {
-					return Err(Error::<T>::WrongVoteType.into());
+					ProjectProposals::<T>::insert(ipfs.clone(), report);
 				},
 			}
 
-			Self::deposit_event(Event::SuccessfulVote(who.clone(), ipfs));
+			Self::deposit_event(Event::SuccessfulVote(user.clone(), ipfs.clone()));
 
 			Ok(().into())
 		}
@@ -284,34 +326,42 @@ pub mod pallet {
 		// Propose project
 		#[pallet::call_index(1)]
 		#[pallet::weight(0)]
-		pub fn propose_project(origin: OriginFor<T>, ipfs: IPFSHash) -> DispatchResultWithPostInfo {
-			let who = ensure_signed(origin)?;
+		pub fn propose_project(
+			origin: OriginFor<T>,
+			ipfs: BoundedString<T::IPFSLength>,
+		) -> DispatchResultWithPostInfo {
+			let user = ensure_signed(origin)?;
 
 			// Check if caller is Project Owner account
-			ensure!(ProjectOwners::<T>::contains_key(who.clone()), Error::<T>::NotAuthorized);
+			ensure!(ProjectOwners::<T>::contains_key(user.clone()), Error::<T>::NotAuthorized);
 
 			// Ensure project does not exist
 			ensure!(
-				!ProjectProposals::<T>::contains_key(ipfs),
+				!ProjectProposals::<T>::contains_key(ipfs.clone()),
 				Error::<T>::ProjectProposalAlreadyExists
 			);
 
 			// Get time
 			let creation_date = T::Time::now();
 
+			// Create project hash
+			let nonce = frame_system::Pallet::<T>::account_nonce(&user);
+			let encoded: [u8; 32] = (&user, nonce).using_encoded(blake2_256);
+			let project_hash = H256::from(encoded);
+
 			// Project Proposal info
 			let project_proposal_info = PProposalInfo {
-				project_owner: who.clone(),
+				project_owner: user.clone(),
 				creation_date,
-				project_hash: ipfs,
+				project_hash,
 				votes_for: BTreeSet::<AccountIdOf<T>>::new(),
 				votes_against: BTreeSet::<AccountIdOf<T>>::new(),
 			};
 
 			// Write to a storage
-			ProjectProposals::<T>::insert(ipfs, project_proposal_info);
+			ProjectProposals::<T>::insert(ipfs.clone(), project_proposal_info);
 
-			Self::deposit_event(Event::ProjectProposalCreated(who.clone(), ipfs));
+			Self::deposit_event(Event::ProjectProposalCreated(user.clone(), ipfs));
 
 			Ok(().into())
 		}
