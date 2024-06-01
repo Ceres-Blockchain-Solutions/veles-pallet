@@ -266,6 +266,7 @@ impl pallet_veles::Config for Runtime {
 	type CarboCreditDecimal = CarboCreditDecimal;
 	type Time = Timestamp;
 	type PenaltyLevelsConfiguration = PenaltyLevelsConfiguration;
+	type Currency = Balances;
 }
 
 // Create the runtime by composing the FRAME pallets that were previously configured.

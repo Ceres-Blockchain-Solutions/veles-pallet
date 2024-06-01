@@ -3,6 +3,7 @@
 pub use codec::{Decode, Encode};
 pub use common::BoundedString;
 pub use frame_support::pallet_prelude::Get;
+pub use frame_support::traits::Currency;
 pub use pallet::*;
 pub use sp_core::{blake2_256, H256};
 pub use sp_std::collections::btree_set::BTreeSet;
@@ -62,12 +63,30 @@ pub struct CFReportInfo<AccountIdOf, MomentOf> {
 #[derive(Encode, Decode, Clone, Default, PartialEq, Eq, scale_info::TypeInfo)]
 #[cfg_attr(feature = "std", derive(Debug))]
 pub struct PProposalInfo<AccountIdOf, MomentOf> {
-	// Project Owner
+	// Project owner
 	project_owner: AccountIdOf,
 	// Creation date
 	creation_date: MomentOf,
 	// Project hash
 	project_hash: H256,
+	// Votes for
+	votes_for: BTreeSet<AccountIdOf>,
+	// Votes against
+	votes_against: BTreeSet<AccountIdOf>,
+}
+
+// Carbon Credit Batch Proposal info structure
+#[derive(Encode, Decode, Clone, Default, PartialEq, Eq, scale_info::TypeInfo)]
+#[cfg_attr(feature = "std", derive(Debug))]
+pub struct CCBProposalInfo<AccountIdOf, BalanceOf> {
+	// Project hash
+	project_hash: H256,
+	// Carbon credit batch hash
+	batch_hash: H256,
+	// Project hash
+	credit_amount: i128,
+	// Initial carbon credit price
+	initial_credit_price: BalanceOf,
 	// Votes for
 	votes_for: BTreeSet<AccountIdOf>,
 	// Votes against
@@ -113,6 +132,7 @@ pub mod pallet {
 	use frame_system::pallet_prelude::*;
 	// use hex_literal::hex;
 	use sp_std::collections::btree_set::BTreeSet;
+ 	use frame_support::traits::ReservableCurrency;
 
 	#[pallet::pallet]
 	#[pallet::without_storage_info]
@@ -125,6 +145,7 @@ pub mod pallet {
 		type IPFSLength: Get<u32>;
 		type CarboCreditDecimal: Get<u8>;
 		type Time: Time;
+		type Currency: ReservableCurrency<Self::AccountId>;
 
 		#[pallet::constant]
 		type PenaltyLevelsConfiguration: Get<[PenaltyLevelConfig; 5]>;
@@ -134,6 +155,7 @@ pub mod pallet {
 	type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
 	type MomentOf<T> = <<T as Config>::Time as Time>::Moment;
 	type BlockNumber<T> = BlockNumberFor<T>;
+	type BalanceOf<T> = <<T as Config>::Currency as Currency<AccountIdOf<T>>>::Balance;
 
 	/// Helper functions
 	// Default authority accounts
@@ -233,6 +255,17 @@ pub mod pallet {
 		Identity,
 		BoundedString<T::IPFSLength>,
 		PProposalInfo<AccountIdOf<T>, MomentOf<T>>,
+		OptionQuery,
+	>;
+
+	// Carbon Credit Batch proposals
+	#[pallet::storage]
+	#[pallet::getter(fn carbon_credit_batch_proposals)]
+	pub(super) type CCBProposals<T: Config> = StorageMap<
+		_,
+		Identity,
+		BoundedString<T::IPFSLength>,
+		CCBProposalInfo<AccountIdOf<T>, BalanceOf<T>>,
 		OptionQuery,
 	>;
 
