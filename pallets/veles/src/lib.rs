@@ -291,6 +291,8 @@ pub mod pallet {
 		ProjectProposalAlreadyExists,
 		/// Project Proposal not found
 		ProjectProposalNotFound,
+		/// Carbon credit batch proposal not found
+		CCBProposalNotFound,
 		/// Wrong vote type
 		WrongVoteType,
 	}
@@ -350,6 +352,25 @@ pub mod pallet {
 
 					ProjectProposals::<T>::insert(ipfs.clone(), report);
 				},
+				VoteType::CCBVote => {
+					// Get carbon credit batch proposal info or return error if it does not exist
+					let mut batch = CCBProposals::<T>::get(ipfs.clone())
+						.ok_or(Error::<T>::CCBProposalNotFound)?;
+
+					// Check if vote already exists
+					ensure!(
+						!batch.votes_for.contains(&user) && !batch.votes_against.contains(&user),
+						Error::<T>::VoteAlreadySubmitted
+					);
+
+					if vote {
+						batch.votes_for.insert(user.clone());
+					} else {
+						batch.votes_against.insert(user.clone());
+					};
+
+					CCBProposals::<T>::insert(ipfs.clone(), batch);
+				}
 			}
 
 			Self::deposit_event(Event::SuccessfulVote(user.clone(), ipfs.clone()));
