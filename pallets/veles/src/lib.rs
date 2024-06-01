@@ -78,11 +78,13 @@ pub struct PProposalInfo<AccountIdOf, MomentOf> {
 // Carbon Credit Batch Proposal info structure
 #[derive(Encode, Decode, Clone, Default, PartialEq, Eq, scale_info::TypeInfo)]
 #[cfg_attr(feature = "std", derive(Debug))]
-pub struct CCBProposalInfo<AccountIdOf, BalanceOf> {
+pub struct CCBProposalInfo<MomentOf, BalanceOf, AccountIdOf> {
 	// Project hash
 	project_hash: H256,
 	// Carbon credit batch hash
 	batch_hash: H256,
+	// Creation date
+	creation_date: MomentOf,
 	// Project hash
 	credit_amount: i128,
 	// Initial carbon credit price
@@ -132,8 +134,8 @@ pub mod pallet {
 	use frame_support::traits::Time;
 	use frame_system::pallet_prelude::*;
 	// use hex_literal::hex;
+	use frame_support::traits::ReservableCurrency;
 	use sp_std::collections::btree_set::BTreeSet;
- 	use frame_support::traits::ReservableCurrency;
 
 	#[pallet::pallet]
 	#[pallet::without_storage_info]
@@ -266,17 +268,19 @@ pub mod pallet {
 		_,
 		Identity,
 		BoundedString<T::IPFSLength>,
-		CCBProposalInfo<AccountIdOf<T>, BalanceOf<T>>,
+		CCBProposalInfo<MomentOf<T>, BalanceOf<T>, AccountIdOf<T>>,
 		OptionQuery,
 	>;
 
 	#[pallet::event]
 	#[pallet::generate_deposit(pub (super) fn deposit_event)]
 	pub enum Event<T: Config> {
-		/// Successful Vote
+		/// Successful Vote Cast
 		SuccessfulVote(AccountIdOf<T>, BoundedString<T::IPFSLength>),
-		/// Successful Project Proposal
+		/// Successful Project Proposal Created
 		ProjectProposalCreated(AccountIdOf<T>, BoundedString<T::IPFSLength>),
+		/// Carbon Credit Batch Proposal Created
+		CarbonCreditBatchProposalCreated(AccountIdOf<T>, BoundedString<T::IPFSLength>),
 	}
 
 	#[pallet::error]
@@ -295,6 +299,8 @@ pub mod pallet {
 		CCBProposalNotFound,
 		/// Wrong vote type
 		WrongVoteType,
+		/// Project doesn't exist
+		ProjectDoesntExist,
 	}
 
 	#[pallet::call]
@@ -370,7 +376,7 @@ pub mod pallet {
 					};
 
 					CCBProposals::<T>::insert(ipfs.clone(), batch);
-				}
+				},
 			}
 
 			Self::deposit_event(Event::SuccessfulVote(user.clone(), ipfs.clone()));
@@ -413,10 +419,61 @@ pub mod pallet {
 				votes_against: BTreeSet::<AccountIdOf<T>>::new(),
 			};
 
-			// Write to a storage
+			// Write to info storage
 			ProjectProposals::<T>::insert(ipfs.clone(), project_proposal_info);
 
+			// Deposit event
 			Self::deposit_event(Event::ProjectProposalCreated(user.clone(), ipfs));
+
+			Ok(().into())
+		}
+
+		// Propose carbon credit batch
+		#[pallet::call_index(2)]
+		#[pallet::weight(0)]
+		pub fn propose_carbon_credit_batch(
+			origin: OriginFor<T>,
+			project_hash: H256,
+			credit_amount: i128,
+			initial_credit_price: BalanceOf<T>,
+			ipfs: BoundedString<T::IPFSLength>,
+		) -> DispatchResultWithPostInfo {
+			let user = ensure_signed(origin)?;
+
+			// Check if caller is a Project Owner account
+			ensure!(ProjectOwners::<T>::contains_key(user.clone()), Error::<T>::NotAuthorized);
+
+			// Check if project exists
+			let project = Projects::<T>::get(project_hash).ok_or(Error::<T>::ProjectDoesntExist)?;
+
+			// Check if the owner owns the mentioned project
+			let project_proposal = ProjectProposals::<T>::get(project.documentation_ipfs).unwrap();
+			ensure!(project_proposal.project_owner == user, Error::<T>::NotAuthorized);
+
+			// Create batch hash
+			let nonce = frame_system::Pallet::<T>::account_nonce(&user);
+			let encoded: [u8; 32] = (&user, nonce).using_encoded(blake2_256);
+			let batch_hash = H256::from(encoded);
+
+			// Get time
+			let creation_date = T::Time::now();
+
+			// CCB Proposal info
+			let ccb_proposal_info = CCBProposalInfo {
+				project_hash,
+				batch_hash,
+				creation_date,
+				credit_amount,
+				initial_credit_price,
+				votes_for: BTreeSet::<AccountIdOf<T>>::new(),
+				votes_against: BTreeSet::<AccountIdOf<T>>::new(),
+			};
+
+			// Write to info storage
+			CCBProposals::<T>::insert(ipfs.clone(), ccb_proposal_info);
+
+			// Deposit event
+			Self::deposit_event(Event::CarbonCreditBatchProposalCreated(user.clone(), ipfs));
 
 			Ok(().into())
 		}
