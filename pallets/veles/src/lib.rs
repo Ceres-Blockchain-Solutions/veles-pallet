@@ -34,7 +34,7 @@ pub struct PVoPOInfo<IPFSLength: Get<u32>, BlockNumber> {
 #[derive(Encode, Decode, Default, PartialEq, Eq, scale_info::TypeInfo)]
 #[cfg_attr(feature = "std", derive(Debug))]
 #[scale_info(skip_type_params(IPFSLength))]
-pub struct CFAInfo<MomentOf, IPFSLength: Get<u32>> {
+pub struct CFAccountInfo<MomentOf, IPFSLength: Get<u32>> {
 	// IPFS link to CFA documentation
 	documentation_ipfs: BoundedString<IPFSLength>,
 	// Carbon credit balance
@@ -47,8 +47,8 @@ pub struct CFAInfo<MomentOf, IPFSLength: Get<u32>> {
 #[derive(Encode, Decode, Default, PartialEq, Eq, scale_info::TypeInfo)]
 #[cfg_attr(feature = "std", derive(Debug))]
 pub struct CFReportInfo<AccountIdOf, MomentOf> {
-	// Account
-	account_id: AccountIdOf,
+	// Carbon footprint account
+	cf_account: AccountIdOf,
 	// Creation date
 	creation_date: MomentOf,
 	// Carbon deficit (aka Carbon footprint)
@@ -122,9 +122,9 @@ pub struct PenaltyLevelConfig {
 #[derive(Encode, Decode, PartialEq, Eq, scale_info::TypeInfo, Clone)]
 #[cfg_attr(feature = "std", derive(Debug))]
 pub enum VoteType {
-	CDRVote,
-	ProposalVote,
-	CCBVote,
+	CFReportVote,
+	PProposalVote,
+	CCBatchVote,
 }
 
 #[frame_support::pallet]
@@ -191,8 +191,13 @@ pub mod pallet {
 	// Carbon Footprint accounts
 	#[pallet::storage]
 	#[pallet::getter(fn carbon_footprint_accounts)]
-	pub(super) type CarbonFootprintAccounts<T: Config> =
-		StorageMap<_, Identity, AccountIdOf<T>, CFAInfo<MomentOf<T>, T::IPFSLength>, OptionQuery>;
+	pub(super) type CarbonFootprintAccounts<T: Config> = StorageMap<
+		_,
+		Identity,
+		AccountIdOf<T>,
+		CFAccountInfo<MomentOf<T>, T::IPFSLength>,
+		OptionQuery,
+	>;
 
 	// Trader accounts
 	#[pallet::storage]
@@ -239,10 +244,10 @@ pub mod pallet {
 	pub(super) type PenaltyTimeouts<T: Config> =
 		StorageMap<_, Identity, BlockNumber<T>, BTreeSet<AccountIdOf<T>>, OptionQuery>;
 
-	// Carbon deficit reports
+	// Carbon footprint reports
 	#[pallet::storage]
-	#[pallet::getter(fn carbon_deficit_reports)]
-	pub(super) type CarbonDeficitReports<T: Config> = StorageMap<
+	#[pallet::getter(fn carbon_footprint_reports)]
+	pub(super) type CFReports<T: Config> = StorageMap<
 		_,
 		Identity,
 		BoundedString<T::IPFSLength>,
@@ -286,9 +291,9 @@ pub mod pallet {
 	#[pallet::error]
 	pub enum Error<T> {
 		/// Report not found
-		ReportNotFound,
+		CFReportNotFound,
 		/// Not Authorized
-		NotAuthorized,
+		Unauthorized,
 		/// Vote already submitted
 		VoteAlreadySubmitted,
 		/// Project proposal already exists
@@ -317,13 +322,13 @@ pub mod pallet {
 			let user = ensure_signed(origin)?;
 
 			// Check if caller is Project Validator account
-			ensure!(ProjectValidators::<T>::contains_key(user.clone()), Error::<T>::NotAuthorized);
+			ensure!(ProjectValidators::<T>::contains_key(user.clone()), Error::<T>::Unauthorized);
 
 			match vote_type {
-				VoteType::CDRVote => {
+				VoteType::CFReportVote => {
 					// Get report info and return error if it does not exist
-					let mut report = CarbonDeficitReports::<T>::get(ipfs.clone())
-						.ok_or(Error::<T>::ReportNotFound)?;
+					let mut report =
+						CFReports::<T>::get(ipfs.clone()).ok_or(Error::<T>::CFReportNotFound)?;
 
 					// Check if vote already exists
 					ensure!(
@@ -337,9 +342,9 @@ pub mod pallet {
 						report.votes_against.insert(user.clone());
 					};
 
-					CarbonDeficitReports::<T>::insert(ipfs.clone(), report);
+					CFReports::<T>::insert(ipfs.clone(), report);
 				},
-				VoteType::ProposalVote => {
+				VoteType::PProposalVote => {
 					// Get report info or return error if it does not exist
 					let mut report = ProjectProposals::<T>::get(ipfs.clone())
 						.ok_or(Error::<T>::ProjectProposalNotFound)?;
@@ -358,7 +363,7 @@ pub mod pallet {
 
 					ProjectProposals::<T>::insert(ipfs.clone(), report);
 				},
-				VoteType::CCBVote => {
+				VoteType::CCBatchVote => {
 					// Get carbon credit batch proposal info or return error if it does not exist
 					let mut batch = CCBProposals::<T>::get(ipfs.clone())
 						.ok_or(Error::<T>::CCBProposalNotFound)?;
@@ -394,7 +399,7 @@ pub mod pallet {
 			let user = ensure_signed(origin)?;
 
 			// Check if caller is Project Owner account
-			ensure!(ProjectOwners::<T>::contains_key(user.clone()), Error::<T>::NotAuthorized);
+			ensure!(ProjectOwners::<T>::contains_key(user.clone()), Error::<T>::Unauthorized);
 
 			// Ensure project does not exist
 			ensure!(
@@ -441,14 +446,14 @@ pub mod pallet {
 			let user = ensure_signed(origin)?;
 
 			// Check if caller is a Project Owner account
-			ensure!(ProjectOwners::<T>::contains_key(user.clone()), Error::<T>::NotAuthorized);
+			ensure!(ProjectOwners::<T>::contains_key(user.clone()), Error::<T>::Unauthorized);
 
 			// Check if project exists
 			let project = Projects::<T>::get(project_hash).ok_or(Error::<T>::ProjectDoesntExist)?;
 
 			// Check if the owner owns the mentioned project
 			let project_proposal = ProjectProposals::<T>::get(project.documentation_ipfs).unwrap();
-			ensure!(project_proposal.project_owner == user, Error::<T>::NotAuthorized);
+			ensure!(project_proposal.project_owner == user, Error::<T>::Unauthorized);
 
 			// Create batch hash
 			let nonce = frame_system::Pallet::<T>::account_nonce(&user);

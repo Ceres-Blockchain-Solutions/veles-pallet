@@ -246,7 +246,7 @@ impl pallet_sudo::Config for Runtime {
 	type WeightInfo = pallet_sudo::weights::SubstrateWeight<Runtime>;
 }
 
-/// Parameters for the Veles pallet
+// Parameters for the Veles pallet
 parameter_types! {
 	pub const IPFSLength: u32 = 64;
 	pub const CarboCreditDecimal: u8 = 4;
