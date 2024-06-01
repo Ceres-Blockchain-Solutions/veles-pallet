@@ -19,6 +19,7 @@ pub use sp_std::collections::btree_set::BTreeSet;
 type Block = frame_system::mocking::MockBlock<Test>;
 type Moment = u64;
 pub type AccountId = AccountId32;
+pub type Balance = u128;
 
 // Helper functions
 pub fn alice() -> AccountId {
@@ -36,6 +37,7 @@ frame_support::construct_runtime!(
 		System: frame_system,
 		Veles: pallet_veles,
 		Timestamp: pallet_timestamp::{Pallet, Call, Storage, Inherent},
+		Balances: pallet_balances,
 	}
 );
 
@@ -57,13 +59,33 @@ impl frame_system::Config for Test {
 	type BlockHashCount = ConstU64<250>;
 	type Version = ();
 	type PalletInfo = PalletInfo;
-	type AccountData = ();
+	type AccountData = pallet_balances::AccountData<Balance>;
 	type OnNewAccount = ();
 	type OnKilledAccount = ();
 	type SystemWeightInfo = ();
 	type SS58Prefix = ConstU16<42>;
 	type OnSetCode = ();
 	type MaxConsumers = frame_support::traits::ConstU32<16>;
+}
+
+parameter_types! {
+	pub const ExistentialDeposit: u128 = 1;
+}
+
+impl pallet_balances::Config for Test {
+	type Balance = Balance;
+	type DustRemoval = ();
+	type RuntimeEvent = RuntimeEvent;
+	type ExistentialDeposit = ExistentialDeposit;
+	type AccountStore = System;
+	type WeightInfo = ();
+	type MaxLocks = ();
+	type MaxReserves = ();
+	type ReserveIdentifier = ();
+	type MaxFreezes = ();
+	type RuntimeHoldReason = ();
+	type FreezeIdentifier = ();
+	type RuntimeFreezeReason = ();
 }
 
 parameter_types! {
@@ -93,6 +115,7 @@ impl pallet_veles::Config for Test {
 	type CarboCreditDecimal = CarboCreditDecimal;
 	type Time = Timestamp;
 	type PenaltyLevelsConfiguration = PenaltyLevelsConfiguration;
+	type Currency = Balances;
 }
 
 // Build genesis storage according to the mock runtime.
