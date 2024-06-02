@@ -85,7 +85,7 @@ pub struct CCBProposalInfo<MomentOf, BalanceOf, AccountIdOf> {
 	batch_hash: H256,
 	// Creation date
 	creation_date: MomentOf,
-	// Project hash
+	// Carbon credit amount
 	credit_amount: i128,
 	// Initial carbon credit price
 	initial_credit_price: BalanceOf,
@@ -100,7 +100,7 @@ pub struct CCBProposalInfo<MomentOf, BalanceOf, AccountIdOf> {
 #[cfg_attr(feature = "std", derive(Debug))]
 #[scale_info(skip_type_params(IPFSLength))]
 pub struct ProjectInfo<IPFSLength: Get<u32>, MomentOf, BlockNumber> {
-	// IPFS link to CFA documentation
+	// IPFS link to project documentation
 	documentation_ipfs: BoundedString<IPFSLength>,
 	// Creation date
 	creation_date: MomentOf,
@@ -108,6 +108,23 @@ pub struct ProjectInfo<IPFSLength: Get<u32>, MomentOf, BlockNumber> {
 	penalty_level: u8,
 	// Penalty timeout
 	penalty_timeout: BlockNumber,
+}
+
+// Carbon credit batch info structure
+#[derive(Encode, Decode, Clone, Default, PartialEq, Eq, scale_info::TypeInfo)]
+#[cfg_attr(feature = "std", derive(Debug))]
+#[scale_info(skip_type_params(IPFSLength))]
+pub struct CCBInfo<IPFSLength: Get<u32>, MomentOf, BalanceOf, VoteType> {
+	// IPFS link to CFA documentation
+	documentation_ipfs: BoundedString<IPFSLength>,
+	// Creation date
+	creation_date: MomentOf,
+	// Carbon credit amount
+	credit_amount: i128,
+	// Initial carbon credit price
+	initial_credit_price: BalanceOf,
+	// Batch status
+	status: VoteType
 }
 
 // Penalty level structure for carbon footprint
@@ -125,6 +142,15 @@ pub enum VoteType {
 	CFReportVote,
 	PProposalVote,
 	CCBatchVote,
+}
+
+// Carbon credit batch status
+#[derive(Encode, Decode, PartialEq, Eq, scale_info::TypeInfo, Clone)]
+#[cfg_attr(feature = "std", derive(Debug))]
+pub enum CCBStatus {
+	Active,		// Tokens can be traded and retired
+	Frozen,		// Tokens can't be traded or retired
+	Redacted,	// Tokens have been removed from circulation
 }
 
 #[frame_support::pallet]
