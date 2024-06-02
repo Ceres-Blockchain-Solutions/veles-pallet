@@ -480,3 +480,93 @@ fn cast_vote_ccbatch_vote_already_submitted() {
 		);
 	});
 }
+
+#[test]
+fn propose_project_unauthorized() {
+	new_test_ext().execute_with(|| {
+		// Create project proposal IPFS link
+		let ipfs_project_proposal_documentation =
+			BoundedString::<IPFSLength>::truncate_from("ipfs_project_proposal_documentation");
+
+		// Go past genesis block so events get deposited
+		System::set_block_number(1);
+
+		// Check for Unauthorized error
+		assert_err!(
+			Veles::propose_project(
+				RuntimeOrigin::signed(alice()),
+				ipfs_project_proposal_documentation,
+			),
+			Error::<Test>::Unauthorized
+		);
+	});
+}
+
+#[test]
+fn propose_project_ok() {
+	new_test_ext().execute_with(|| {
+		// Create project proposal IPFS link
+		let ipfs_project_proposal_documentation =
+			BoundedString::<IPFSLength>::truncate_from("ipfs_project_proposal_documentation");
+
+		// Create project owner info
+		let project_owner_info = PVoPOInfo {
+			documentation_ipfs: BoundedString::<IPFSLength>::truncate_from(
+				"ipfs_project_owner_documentation",
+			),
+			penalty_level: 0,
+			penalty_timeout: 0,
+		};
+
+		// Go past genesis block so events get deposited
+		System::set_block_number(1);
+
+		// Insert project owner
+		ProjectOwners::<Test>::insert(alice(), project_owner_info);
+
+		// Propose project succesfully
+		assert_ok!(Veles::propose_project(
+			RuntimeOrigin::signed(alice()),
+			ipfs_project_proposal_documentation,
+		));
+	});
+}
+
+#[test]
+fn propose_project_project_proposal_already_exists() {
+	new_test_ext().execute_with(|| {
+		// Create project proposal IPFS link
+		let ipfs_project_proposal_documentation =
+			BoundedString::<IPFSLength>::truncate_from("ipfs_project_proposal_documentation");
+
+		// Create project owner info
+		let project_owner_info = PVoPOInfo {
+			documentation_ipfs: BoundedString::<IPFSLength>::truncate_from(
+				"ipfs_project_owner_documentation",
+			),
+			penalty_level: 0,
+			penalty_timeout: 0,
+		};
+
+		// Go past genesis block so events get deposited
+		System::set_block_number(1);
+
+		// Insert project owner
+		ProjectOwners::<Test>::insert(alice(), project_owner_info);
+
+		// Propose project succesfully
+		assert_ok!(Veles::propose_project(
+			RuntimeOrigin::signed(alice()),
+			ipfs_project_proposal_documentation.clone(),
+		));
+
+		// Check for ProjectProposalAlreadyExists error
+		assert_err!(
+			Veles::propose_project(
+				RuntimeOrigin::signed(alice()),
+				ipfs_project_proposal_documentation,
+			),
+			Error::<Test>::ProjectProposalAlreadyExists
+		);
+	});
+}
