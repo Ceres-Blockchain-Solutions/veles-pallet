@@ -3,6 +3,7 @@
 pub use codec::{Decode, Encode};
 pub use common::BoundedString;
 pub use frame_support::pallet_prelude::Get;
+pub use frame_support::traits::Currency;
 pub use pallet::*;
 pub use sp_core::{blake2_256, H256};
 pub use sp_std::collections::btree_set::BTreeSet;
@@ -33,7 +34,7 @@ pub struct PVoPOInfo<IPFSLength: Get<u32>, BlockNumber> {
 #[derive(Encode, Decode, Default, PartialEq, Eq, scale_info::TypeInfo)]
 #[cfg_attr(feature = "std", derive(Debug))]
 #[scale_info(skip_type_params(IPFSLength))]
-pub struct CFAInfo<MomentOf, IPFSLength: Get<u32>> {
+pub struct CFAccountInfo<MomentOf, IPFSLength: Get<u32>> {
 	// IPFS link to CFA documentation
 	documentation_ipfs: BoundedString<IPFSLength>,
 	// Carbon credit balance
@@ -46,8 +47,8 @@ pub struct CFAInfo<MomentOf, IPFSLength: Get<u32>> {
 #[derive(Encode, Decode, Default, PartialEq, Eq, scale_info::TypeInfo)]
 #[cfg_attr(feature = "std", derive(Debug))]
 pub struct CFReportInfo<AccountIdOf, MomentOf> {
-	// Account
-	account_id: AccountIdOf,
+	// Carbon footprint account
+	cf_account: AccountIdOf,
 	// Creation date
 	creation_date: MomentOf,
 	// Carbon deficit (aka Carbon footprint)
@@ -61,13 +62,33 @@ pub struct CFReportInfo<AccountIdOf, MomentOf> {
 // Project Proposal info structure
 #[derive(Encode, Decode, Clone, Default, PartialEq, Eq, scale_info::TypeInfo)]
 #[cfg_attr(feature = "std", derive(Debug))]
-pub struct PProposalInfo<AccountIdOf, MomentOf> {
-	// Project Owner
+pub struct ProjectProposalInfo<AccountIdOf, MomentOf> {
+	// Project owner
 	project_owner: AccountIdOf,
 	// Creation date
 	creation_date: MomentOf,
 	// Project hash
 	project_hash: H256,
+	// Votes for
+	votes_for: BTreeSet<AccountIdOf>,
+	// Votes against
+	votes_against: BTreeSet<AccountIdOf>,
+}
+
+// Carbon Credit Batch Proposal info structure
+#[derive(Encode, Decode, Clone, Default, PartialEq, Eq, scale_info::TypeInfo)]
+#[cfg_attr(feature = "std", derive(Debug))]
+pub struct CCBProposalInfo<MomentOf, BalanceOf, AccountIdOf> {
+	// Project hash
+	project_hash: H256,
+	// Carbon credit batch hash
+	batch_hash: H256,
+	// Creation date
+	creation_date: MomentOf,
+	// Project hash
+	credit_amount: i128,
+	// Initial carbon credit price
+	initial_credit_price: BalanceOf,
 	// Votes for
 	votes_for: BTreeSet<AccountIdOf>,
 	// Votes against
@@ -101,8 +122,9 @@ pub struct PenaltyLevelConfig {
 #[derive(Encode, Decode, PartialEq, Eq, scale_info::TypeInfo, Clone)]
 #[cfg_attr(feature = "std", derive(Debug))]
 pub enum VoteType {
-	CDRVote,
-	ProposalVote,
+	CFReportVote,
+	PProposalVote,
+	CCBatchVote,
 }
 
 #[frame_support::pallet]
@@ -112,6 +134,7 @@ pub mod pallet {
 	use frame_support::traits::Time;
 	use frame_system::pallet_prelude::*;
 	// use hex_literal::hex;
+	use frame_support::traits::ReservableCurrency;
 	use sp_std::collections::btree_set::BTreeSet;
 
 	#[pallet::pallet]
@@ -125,6 +148,7 @@ pub mod pallet {
 		type IPFSLength: Get<u32>;
 		type CarboCreditDecimal: Get<u8>;
 		type Time: Time;
+		type Currency: ReservableCurrency<Self::AccountId>;
 
 		#[pallet::constant]
 		type PenaltyLevelsConfiguration: Get<[PenaltyLevelConfig; 5]>;
@@ -134,6 +158,7 @@ pub mod pallet {
 	type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
 	type MomentOf<T> = <<T as Config>::Time as Time>::Moment;
 	type BlockNumber<T> = BlockNumberFor<T>;
+	type BalanceOf<T> = <<T as Config>::Currency as Currency<AccountIdOf<T>>>::Balance;
 
 	/// Helper functions
 	// Default authority accounts
@@ -166,8 +191,13 @@ pub mod pallet {
 	// Carbon Footprint accounts
 	#[pallet::storage]
 	#[pallet::getter(fn carbon_footprint_accounts)]
-	pub(super) type CarbonFootprintAccounts<T: Config> =
-		StorageMap<_, Identity, AccountIdOf<T>, CFAInfo<MomentOf<T>, T::IPFSLength>, OptionQuery>;
+	pub(super) type CarbonFootprintAccounts<T: Config> = StorageMap<
+		_,
+		Identity,
+		AccountIdOf<T>,
+		CFAccountInfo<MomentOf<T>, T::IPFSLength>,
+		OptionQuery,
+	>;
 
 	// Trader accounts
 	#[pallet::storage]
@@ -214,10 +244,10 @@ pub mod pallet {
 	pub(super) type PenaltyTimeouts<T: Config> =
 		StorageMap<_, Identity, BlockNumber<T>, BTreeSet<AccountIdOf<T>>, OptionQuery>;
 
-	// Carbon deficit reports
+	// Carbon footprint reports
 	#[pallet::storage]
-	#[pallet::getter(fn carbon_deficit_reports)]
-	pub(super) type CarbonDeficitReports<T: Config> = StorageMap<
+	#[pallet::getter(fn carbon_footprint_reports)]
+	pub(super) type CFReports<T: Config> = StorageMap<
 		_,
 		Identity,
 		BoundedString<T::IPFSLength>,
@@ -232,33 +262,50 @@ pub mod pallet {
 		_,
 		Identity,
 		BoundedString<T::IPFSLength>,
-		PProposalInfo<AccountIdOf<T>, MomentOf<T>>,
+		ProjectProposalInfo<AccountIdOf<T>, MomentOf<T>>,
+		OptionQuery,
+	>;
+
+	// Carbon Credit Batch proposals
+	#[pallet::storage]
+	#[pallet::getter(fn carbon_credit_batch_proposals)]
+	pub(super) type CCBProposals<T: Config> = StorageMap<
+		_,
+		Identity,
+		BoundedString<T::IPFSLength>,
+		CCBProposalInfo<MomentOf<T>, BalanceOf<T>, AccountIdOf<T>>,
 		OptionQuery,
 	>;
 
 	#[pallet::event]
 	#[pallet::generate_deposit(pub (super) fn deposit_event)]
 	pub enum Event<T: Config> {
-		/// Successful Vote
+		/// Successful Vote Cast
 		SuccessfulVote(AccountIdOf<T>, BoundedString<T::IPFSLength>),
-		/// Successful Project Proposal
+		/// Successful Project Proposal Created
 		ProjectProposalCreated(AccountIdOf<T>, BoundedString<T::IPFSLength>),
+		/// Carbon Credit Batch Proposal Created
+		CarbonCreditBatchProposalCreated(AccountIdOf<T>, BoundedString<T::IPFSLength>),
 	}
 
 	#[pallet::error]
 	pub enum Error<T> {
 		/// Report not found
-		ReportNotFound,
+		CFReportNotFound,
 		/// Not Authorized
-		NotAuthorized,
+		Unauthorized,
 		/// Vote already submitted
 		VoteAlreadySubmitted,
 		/// Project proposal already exists
 		ProjectProposalAlreadyExists,
 		/// Project Proposal not found
 		ProjectProposalNotFound,
+		/// Carbon credit batch proposal not found
+		CCBProposalNotFound,
 		/// Wrong vote type
 		WrongVoteType,
+		/// Project doesn't exist
+		ProjectDoesntExist,
 	}
 
 	#[pallet::call]
@@ -275,13 +322,13 @@ pub mod pallet {
 			let user = ensure_signed(origin)?;
 
 			// Check if caller is Project Validator account
-			ensure!(ProjectValidators::<T>::contains_key(user.clone()), Error::<T>::NotAuthorized);
+			ensure!(ProjectValidators::<T>::contains_key(user.clone()), Error::<T>::Unauthorized);
 
 			match vote_type {
-				VoteType::CDRVote => {
+				VoteType::CFReportVote => {
 					// Get report info and return error if it does not exist
-					let mut report = CarbonDeficitReports::<T>::get(ipfs.clone())
-						.ok_or(Error::<T>::ReportNotFound)?;
+					let mut report =
+						CFReports::<T>::get(ipfs.clone()).ok_or(Error::<T>::CFReportNotFound)?;
 
 					// Check if vote already exists
 					ensure!(
@@ -295,26 +342,46 @@ pub mod pallet {
 						report.votes_against.insert(user.clone());
 					};
 
-					CarbonDeficitReports::<T>::insert(ipfs.clone(), report);
+					CFReports::<T>::insert(ipfs.clone(), report);
 				},
-				VoteType::ProposalVote => {
-					// Get report info or return error if it does not exist
-					let mut report = ProjectProposals::<T>::get(ipfs.clone())
+				VoteType::PProposalVote => {
+					// Get proposal info or return error if it does not exist
+					let mut proposal = ProjectProposals::<T>::get(ipfs.clone())
 						.ok_or(Error::<T>::ProjectProposalNotFound)?;
 
 					// Check if vote already exists
 					ensure!(
-						!report.votes_for.contains(&user) && !report.votes_against.contains(&user),
+						!proposal.votes_for.contains(&user)
+							&& !proposal.votes_against.contains(&user),
 						Error::<T>::VoteAlreadySubmitted
 					);
 
 					if vote {
-						report.votes_for.insert(user.clone());
+						proposal.votes_for.insert(user.clone());
 					} else {
-						report.votes_against.insert(user.clone());
+						proposal.votes_against.insert(user.clone());
 					};
 
-					ProjectProposals::<T>::insert(ipfs.clone(), report);
+					ProjectProposals::<T>::insert(ipfs.clone(), proposal);
+				},
+				VoteType::CCBatchVote => {
+					// Get carbon credit batch proposal info or return error if it does not exist
+					let mut batch = CCBProposals::<T>::get(ipfs.clone())
+						.ok_or(Error::<T>::CCBProposalNotFound)?;
+
+					// Check if vote already exists
+					ensure!(
+						!batch.votes_for.contains(&user) && !batch.votes_against.contains(&user),
+						Error::<T>::VoteAlreadySubmitted
+					);
+
+					if vote {
+						batch.votes_for.insert(user.clone());
+					} else {
+						batch.votes_against.insert(user.clone());
+					};
+
+					CCBProposals::<T>::insert(ipfs.clone(), batch);
 				},
 			}
 
@@ -333,7 +400,7 @@ pub mod pallet {
 			let user = ensure_signed(origin)?;
 
 			// Check if caller is Project Owner account
-			ensure!(ProjectOwners::<T>::contains_key(user.clone()), Error::<T>::NotAuthorized);
+			ensure!(ProjectOwners::<T>::contains_key(user.clone()), Error::<T>::Unauthorized);
 
 			// Ensure project does not exist
 			ensure!(
@@ -350,7 +417,7 @@ pub mod pallet {
 			let project_hash = H256::from(encoded);
 
 			// Project Proposal info
-			let project_proposal_info = PProposalInfo {
+			let project_proposal_info = ProjectProposalInfo {
 				project_owner: user.clone(),
 				creation_date,
 				project_hash,
@@ -358,10 +425,61 @@ pub mod pallet {
 				votes_against: BTreeSet::<AccountIdOf<T>>::new(),
 			};
 
-			// Write to a storage
+			// Write to info storage
 			ProjectProposals::<T>::insert(ipfs.clone(), project_proposal_info);
 
+			// Deposit event
 			Self::deposit_event(Event::ProjectProposalCreated(user.clone(), ipfs));
+
+			Ok(().into())
+		}
+
+		// Propose carbon credit batch
+		#[pallet::call_index(2)]
+		#[pallet::weight(0)]
+		pub fn propose_carbon_credit_batch(
+			origin: OriginFor<T>,
+			project_hash: H256,
+			credit_amount: i128,
+			initial_credit_price: BalanceOf<T>,
+			ipfs: BoundedString<T::IPFSLength>,
+		) -> DispatchResultWithPostInfo {
+			let user = ensure_signed(origin)?;
+
+			// Check if caller is a Project Owner account
+			ensure!(ProjectOwners::<T>::contains_key(user.clone()), Error::<T>::Unauthorized);
+
+			// Check if project exists
+			let project = Projects::<T>::get(project_hash).ok_or(Error::<T>::ProjectDoesntExist)?;
+
+			// Check if the owner owns the mentioned project
+			let project_proposal = ProjectProposals::<T>::get(project.documentation_ipfs).unwrap();
+			ensure!(project_proposal.project_owner == user, Error::<T>::Unauthorized);
+
+			// Create batch hash
+			let nonce = frame_system::Pallet::<T>::account_nonce(&user);
+			let encoded: [u8; 32] = (&user, nonce).using_encoded(blake2_256);
+			let batch_hash = H256::from(encoded);
+
+			// Get time
+			let creation_date = T::Time::now();
+
+			// CCB Proposal info
+			let ccb_proposal_info = CCBProposalInfo {
+				project_hash,
+				batch_hash,
+				creation_date,
+				credit_amount,
+				initial_credit_price,
+				votes_for: BTreeSet::<AccountIdOf<T>>::new(),
+				votes_against: BTreeSet::<AccountIdOf<T>>::new(),
+			};
+
+			// Write to info storage
+			CCBProposals::<T>::insert(ipfs.clone(), ccb_proposal_info);
+
+			// Deposit event
+			Self::deposit_event(Event::CarbonCreditBatchProposalCreated(user.clone(), ipfs));
 
 			Ok(().into())
 		}

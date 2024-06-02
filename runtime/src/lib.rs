@@ -246,7 +246,7 @@ impl pallet_sudo::Config for Runtime {
 	type WeightInfo = pallet_sudo::weights::SubstrateWeight<Runtime>;
 }
 
-/// Parameters for the Veles pallet
+// Parameters for the Veles pallet
 parameter_types! {
 	pub const IPFSLength: u32 = 64;
 	pub const CarboCreditDecimal: u8 = 4;
@@ -266,6 +266,7 @@ impl pallet_veles::Config for Runtime {
 	type CarboCreditDecimal = CarboCreditDecimal;
 	type Time = Timestamp;
 	type PenaltyLevelsConfiguration = PenaltyLevelsConfiguration;
+	type Currency = Balances;
 }
 
 // Create the runtime by composing the FRAME pallets that were previously configured.
