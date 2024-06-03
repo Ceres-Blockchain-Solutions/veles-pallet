@@ -521,8 +521,8 @@ pub mod pallet {
 
 	impl<T: Config> Pallet<T> {
 		// Check if the documentation (ipfs link) has been used previously
-		// Returns false if the documentation is used
-		// Returns true if the documentation is available
+		// Return false if the documentation is used
+		// Return true if the documentation is available
 		pub fn is_ipfs_available(ipfs: BoundedString<T::IPFSLength>) -> bool {
 			// Check in reports and proposals
 			if CFReports::<T>::contains_key(ipfs.clone())
@@ -557,16 +557,17 @@ pub mod pallet {
 		}
 
 		// Check if the account is tied to any existing entity on the pallet
-		pub fn is_account_id_registered(account_id: AccountIdOf<T>) -> bool {
-			// Check in CF accounts
-			if CFReports::<T>::contains_key(ipfs.clone())
-				|| ProjectProposals::<T>::contains_key(ipfs.clone())
-				|| CCBProposals::<T>::contains_key(ipfs.clone())
+		// Return false if the account_id is used
+		// Return true if the account_id is available
+		pub fn is_account_id_available(account_id: AccountIdOf<T>) -> bool {
+			// Check in carbon footprint, trader, project validator and project owner accounts
+			if CarbonFootprintAccounts::<T>::contains_key(account_id.clone())
+				|| TraderAccounts::<T>::get().contains(&account_id.clone())
+				|| ProjectValidators::<T>::contains_key(account_id.clone()) 
+				|| ProjectOwners::<T>::contains_key(account_id.clone()) 
 			{
 				return false;
 			}
-
-			
 
 			return true;
 		}
