@@ -352,9 +352,6 @@ pub mod pallet {
 			// Check if caller is Project Validator account
 			ensure!(ProjectValidators::<T>::contains_key(user.clone()), Error::<T>::Unauthorized);
 
-			// Check if the documentation (IPFS link) has been used previously
-			ensure!(Self::was_ipfs_used(ipfs.clone()), Error::<T>::DocumentationWasUsedPreviously);
-
 			match vote_type {
 				VoteType::CFReportVote => {
 					// Get report info and return error if it does not exist
