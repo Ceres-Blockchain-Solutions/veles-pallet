@@ -522,14 +522,36 @@ pub mod pallet {
 	impl<T: Config> Pallet<T> {
 		// Check if the documentation (ipfs link) has been used previously
 		pub fn was_ipfs_used(ipfs: BoundedString<T::IPFSLength>) -> bool {
-			if (CFReports::<T>::contains_key(ipfs.clone())
+			// Check in reports and proposals
+			if CFReports::<T>::contains_key(ipfs.clone())
 				|| ProjectProposals::<T>::contains_key(ipfs.clone())
-				|| CCBProposals::<T>::contains_key(ipfs.clone()))
+				|| CCBProposals::<T>::contains_key(ipfs.clone())
 			{
-				true
-			} else {
-				false
+				return true
 			}
+
+			// Check in CF accounts
+			for (_, cfa_info) in <CarbonFootprintAccounts<T>>::iter() {
+				if cfa_info.documentation_ipfs == ipfs {
+					return true
+				}
+			}
+
+			// Check in validators
+			for (_, cfa_info) in <ProjectValidators<T>>::iter() {
+				if cfa_info.documentation_ipfs == ipfs {
+					return true
+				}
+			}
+
+			// Check in project owners
+			for (_, cfa_info) in <ProjectOwners<T>>::iter() {
+				if cfa_info.documentation_ipfs == ipfs {
+					return true
+				}
+			}
+
+			return false;
 		}
 	}
 }
