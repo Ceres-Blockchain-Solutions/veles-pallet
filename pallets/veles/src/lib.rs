@@ -124,7 +124,7 @@ pub struct CCBInfo<IPFSLength: Get<u32>, MomentOf, BalanceOf, VoteType> {
 	// Initial carbon credit price
 	initial_credit_price: BalanceOf,
 	// Batch status
-	status: VoteType
+	status: VoteType,
 }
 
 // Penalty level structure for carbon footprint
@@ -148,9 +148,9 @@ pub enum VoteType {
 #[derive(Encode, Decode, PartialEq, Eq, scale_info::TypeInfo, Clone)]
 #[cfg_attr(feature = "std", derive(Debug))]
 pub enum CCBStatus {
-	Active,		// Tokens can be traded and retired
-	Frozen,		// Tokens can't be traded or retired
-	Redacted,	// Tokens have been removed from circulation
+	Active,   // Tokens can be traded and retired
+	Frozen,   // Tokens can't be traded or retired
+	Redacted, // Tokens have been removed from circulation
 }
 
 #[frame_support::pallet]
@@ -320,6 +320,8 @@ pub mod pallet {
 		CFReportNotFound,
 		/// Not Authorized
 		Unauthorized,
+		/// Documentation (IPFS link) was used previously
+		DocumentationWasUsedPreviously,
 		/// Vote already submitted
 		VoteAlreadySubmitted,
 		/// Project proposal already exists
@@ -434,6 +436,9 @@ pub mod pallet {
 				Error::<T>::ProjectProposalAlreadyExists
 			);
 
+			// Check if the documentation (IPFS link) has been used previously
+			ensure!(Self::was_ipfs_used(ipfs.clone()), Error::<T>::DocumentationWasUsedPreviously);
+
 			// Get time
 			let creation_date = T::Time::now();
 
@@ -482,6 +487,9 @@ pub mod pallet {
 			let project_proposal = ProjectProposals::<T>::get(project.documentation_ipfs).unwrap();
 			ensure!(project_proposal.project_owner == user, Error::<T>::Unauthorized);
 
+			// Check if the documentation (IPFS link) has been used previously
+			ensure!(Self::was_ipfs_used(ipfs.clone()), Error::<T>::DocumentationWasUsedPreviously);
+
 			// Create batch hash
 			let nonce = frame_system::Pallet::<T>::account_nonce(&user);
 			let encoded: [u8; 32] = (&user, nonce).using_encoded(blake2_256);
@@ -508,6 +516,42 @@ pub mod pallet {
 			Self::deposit_event(Event::CarbonCreditBatchProposalCreated(user.clone(), ipfs));
 
 			Ok(().into())
+		}
+	}
+
+	impl<T: Config> Pallet<T> {
+		// Check if the documentation (ipfs link) has been used previously
+		pub fn was_ipfs_used(ipfs: BoundedString<T::IPFSLength>) -> bool {
+			// Check in reports and proposals
+			if CFReports::<T>::contains_key(ipfs.clone())
+				|| ProjectProposals::<T>::contains_key(ipfs.clone())
+				|| CCBProposals::<T>::contains_key(ipfs.clone())
+			{
+				return false;
+			}
+
+			// Check in CF accounts
+			for (_, cfa_info) in <CarbonFootprintAccounts<T>>::iter() {
+				if cfa_info.documentation_ipfs == ipfs {
+					return false;
+				}
+			}
+
+			// Check in validators
+			for (_, cfa_info) in <ProjectValidators<T>>::iter() {
+				if cfa_info.documentation_ipfs == ipfs {
+					return false;
+				}
+			}
+
+			// Check in project owners
+			for (_, cfa_info) in <ProjectOwners<T>>::iter() {
+				if cfa_info.documentation_ipfs == ipfs {
+					return false;
+				}
+			}
+
+			return true;
 		}
 	}
 }
