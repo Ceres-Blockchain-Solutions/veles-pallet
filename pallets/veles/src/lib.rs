@@ -437,7 +437,7 @@ pub mod pallet {
 			);
 
 			// Check if the documentation (IPFS link) has been used previously
-			ensure!(Self::was_ipfs_used(ipfs.clone()), Error::<T>::DocumentationWasUsedPreviously);
+			ensure!(Self::is_ipfs_available(ipfs.clone()), Error::<T>::DocumentationWasUsedPreviously);
 
 			// Get time
 			let creation_date = T::Time::now();
@@ -488,7 +488,7 @@ pub mod pallet {
 			ensure!(project_proposal.project_owner == user, Error::<T>::Unauthorized);
 
 			// Check if the documentation (IPFS link) has been used previously
-			ensure!(Self::was_ipfs_used(ipfs.clone()), Error::<T>::DocumentationWasUsedPreviously);
+			ensure!(Self::is_ipfs_available(ipfs.clone()), Error::<T>::DocumentationWasUsedPreviously);
 
 			// Create batch hash
 			let nonce = frame_system::Pallet::<T>::account_nonce(&user);
@@ -521,7 +521,9 @@ pub mod pallet {
 
 	impl<T: Config> Pallet<T> {
 		// Check if the documentation (ipfs link) has been used previously
-		pub fn was_ipfs_used(ipfs: BoundedString<T::IPFSLength>) -> bool {
+		// Returns false if the documentation is used
+		// Returns true if the documentation is available
+		pub fn is_ipfs_available(ipfs: BoundedString<T::IPFSLength>) -> bool {
 			// Check in reports and proposals
 			if CFReports::<T>::contains_key(ipfs.clone())
 				|| ProjectProposals::<T>::contains_key(ipfs.clone())
@@ -550,6 +552,21 @@ pub mod pallet {
 					return false;
 				}
 			}
+
+			return true;
+		}
+
+		// Check if the account is tied to any existing entity on the pallet
+		pub fn is_account_id_registered(account_id: AccountIdOf<T>) -> bool {
+			// Check in CF accounts
+			if CFReports::<T>::contains_key(ipfs.clone())
+				|| ProjectProposals::<T>::contains_key(ipfs.clone())
+				|| CCBProposals::<T>::contains_key(ipfs.clone())
+			{
+				return false;
+			}
+
+			
 
 			return true;
 		}
