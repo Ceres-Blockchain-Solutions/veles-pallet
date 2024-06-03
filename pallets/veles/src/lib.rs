@@ -527,31 +527,31 @@ pub mod pallet {
 				|| ProjectProposals::<T>::contains_key(ipfs.clone())
 				|| CCBProposals::<T>::contains_key(ipfs.clone())
 			{
-				return true
+				return false;
 			}
 
 			// Check in CF accounts
 			for (_, cfa_info) in <CarbonFootprintAccounts<T>>::iter() {
 				if cfa_info.documentation_ipfs == ipfs {
-					return true
+					return false;
 				}
 			}
 
 			// Check in validators
 			for (_, cfa_info) in <ProjectValidators<T>>::iter() {
 				if cfa_info.documentation_ipfs == ipfs {
-					return true
+					return false;
 				}
 			}
 
 			// Check in project owners
 			for (_, cfa_info) in <ProjectOwners<T>>::iter() {
 				if cfa_info.documentation_ipfs == ipfs {
-					return true
+					return false;
 				}
 			}
 
-			return false;
+			return true;
 		}
 	}
 }
