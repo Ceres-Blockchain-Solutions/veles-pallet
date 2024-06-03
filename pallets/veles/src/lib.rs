@@ -437,7 +437,7 @@ pub mod pallet {
 			);
 
 			// Check if the documentation (IPFS link) has been used previously
-			ensure!(Self::was_ipfs_used(ipfs.clone()), Error::<T>::DocumentationWasUsedPreviously);
+			ensure!(Self::is_ipfs_available(ipfs.clone()), Error::<T>::DocumentationWasUsedPreviously);
 
 			// Get time
 			let creation_date = T::Time::now();
@@ -488,7 +488,7 @@ pub mod pallet {
 			ensure!(project_proposal.project_owner == user, Error::<T>::Unauthorized);
 
 			// Check if the documentation (IPFS link) has been used previously
-			ensure!(Self::was_ipfs_used(ipfs.clone()), Error::<T>::DocumentationWasUsedPreviously);
+			ensure!(Self::is_ipfs_available(ipfs.clone()), Error::<T>::DocumentationWasUsedPreviously);
 
 			// Create batch hash
 			let nonce = frame_system::Pallet::<T>::account_nonce(&user);
@@ -521,7 +521,9 @@ pub mod pallet {
 
 	impl<T: Config> Pallet<T> {
 		// Check if the documentation (ipfs link) has been used previously
-		pub fn was_ipfs_used(ipfs: BoundedString<T::IPFSLength>) -> bool {
+		// Return false if the documentation is used
+		// Return true if the documentation is available
+		pub fn is_ipfs_available(ipfs: BoundedString<T::IPFSLength>) -> bool {
 			// Check in reports and proposals
 			if CFReports::<T>::contains_key(ipfs.clone())
 				|| ProjectProposals::<T>::contains_key(ipfs.clone())
@@ -549,6 +551,22 @@ pub mod pallet {
 				if cfa_info.documentation_ipfs == ipfs {
 					return false;
 				}
+			}
+
+			return true;
+		}
+
+		// Check if the account is tied to any existing entity on the pallet
+		// Return false if the account_id is used
+		// Return true if the account_id is available
+		pub fn is_account_id_available(account_id: AccountIdOf<T>) -> bool {
+			// Check in carbon footprint, trader, project validator and project owner accounts
+			if CarbonFootprintAccounts::<T>::contains_key(account_id.clone())
+				|| TraderAccounts::<T>::get().contains(&account_id.clone())
+				|| ProjectValidators::<T>::contains_key(account_id.clone()) 
+				|| ProjectOwners::<T>::contains_key(account_id.clone()) 
+			{
+				return false;
 			}
 
 			return true;
