@@ -533,36 +533,6 @@ fn propose_project_ok() {
 }
 
 #[test]
-fn propose_project_ok() {
-	new_test_ext().execute_with(|| {
-		// Create project proposal IPFS link
-		let ipfs_project_proposal_documentation =
-			BoundedString::<IPFSLength>::truncate_from("ipfs_project_proposal_documentation");
-
-		// Create project owner info
-		let project_owner_info = PVoPOInfo {
-			documentation_ipfs: BoundedString::<IPFSLength>::truncate_from(
-				"ipfs_project_owner_documentation",
-			),
-			penalty_level: 0,
-			penalty_timeout: 0,
-		};
-
-		// Go past genesis block so events get deposited
-		System::set_block_number(1);
-
-		// Insert project owner
-		ProjectOwners::<Test>::insert(alice(), project_owner_info);
-
-		// Propose project succesfully
-		assert_ok!(Veles::propose_project(
-			RuntimeOrigin::signed(alice()),
-			ipfs_project_proposal_documentation,
-		));
-	});
-}
-
-#[test]
 fn propose_project_project_proposal_already_exists() {
 	new_test_ext().execute_with(|| {
 		// Create project proposal IPFS link
@@ -813,5 +783,92 @@ fn propose_carbon_credit_batch_ok() {
 			0,
 			ipfs_ccbatch_proposal_documentation,
 		));
+	});
+}
+
+#[test]
+fn propose_project_documentation_was_used_previously() {
+	new_test_ext().execute_with(|| {
+		// Create project proposal IPFS link
+		let ipfs_documentation = BoundedString::<IPFSLength>::truncate_from("ipfs_documentation");
+
+		// Create project owner info
+		let project_owner_info = PVoPOInfo {
+			documentation_ipfs: BoundedString::<IPFSLength>::truncate_from("ipfs_documentation"),
+			penalty_level: 0,
+			penalty_timeout: 0,
+		};
+
+		// Go past genesis block so events get deposited
+		System::set_block_number(1);
+
+		// Insert project owner
+		ProjectOwners::<Test>::insert(alice(), project_owner_info);
+
+		// Check for DocumentationWasUsedPreviously error
+		assert_err!(
+			Veles::propose_project(RuntimeOrigin::signed(alice()), ipfs_documentation),
+			Error::<Test>::DocumentationWasUsedPreviously
+		);
+	});
+}
+
+#[test]
+fn propose_carbon_credit_batch_documentation_was_used_previously() {
+	new_test_ext().execute_with(|| {
+		// Create IPFS link
+		let ipfs_documentation = BoundedString::<IPFSLength>::truncate_from("ipfs_documentation");
+
+		// Create project owner info
+		let project_owner_info = PVoPOInfo {
+			documentation_ipfs: BoundedString::<IPFSLength>::truncate_from("ipfs_documentation"),
+			penalty_level: 0,
+			penalty_timeout: 0,
+		};
+
+		// Go past genesis block so events get deposited
+		System::set_block_number(1);
+
+		// Insert project owner
+		ProjectOwners::<Test>::insert(alice(), project_owner_info);
+
+		// Create project hash
+		let nonce = frame_system::Pallet::<Test>::account_nonce(alice());
+		let encoded: [u8; 32] = (alice(), nonce).using_encoded(blake2_256);
+		let project_hash = H256::from(encoded);
+
+		// Create project proposal info
+		let project_proposal_info = ProjectProposalInfo {
+			project_owner: alice(),
+			creation_date: 0,
+			project_hash,
+			votes_for: BTreeSet::<AccountId>::new(),
+			votes_against: BTreeSet::<AccountId>::new(),
+		};
+
+		// Insert project proposal info
+		ProjectProposals::<Test>::insert(ipfs_documentation.clone(), project_proposal_info);
+
+		// Create project info
+		let project_info = ProjectInfo {
+			documentation_ipfs: ipfs_documentation.clone(),
+			creation_date: 0,
+			penalty_level: 0,
+			penalty_timeout: 0,
+		};
+
+		Projects::<Test>::insert(project_hash, project_info);
+
+		// Check for DocumentationWasUsedPreviously error
+		assert_err!(
+			Veles::propose_carbon_credit_batch(
+				RuntimeOrigin::signed(alice()),
+				project_hash,
+				0,
+				0,
+				ipfs_documentation,
+			),
+			Error::<Test>::DocumentationWasUsedPreviously
+		);
 	});
 }
