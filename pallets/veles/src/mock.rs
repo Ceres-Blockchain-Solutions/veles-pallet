@@ -120,5 +120,15 @@ impl pallet_veles::Config for Test {
 
 // Build genesis storage according to the mock runtime.
 pub fn new_test_ext() -> sp_io::TestExternalities {
-	frame_system::GenesisConfig::<Test>::default().build_storage().unwrap().into()
+	let mut storage = frame_system::GenesisConfig::<Test>::default().build_storage().unwrap();
+
+	let endowed_accounts: Vec<(AccountId, Balance)> = vec![(alice(), 1), (bob(), 100)];
+
+	pallet_balances::GenesisConfig::<Test> {
+		balances: endowed_accounts.iter().map(|(acc, balance)| (acc.clone(), *balance)).collect(),
+	}
+	.assimilate_storage(&mut storage)
+	.unwrap();
+
+	storage.into()
 }

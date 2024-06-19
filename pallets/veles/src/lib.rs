@@ -210,7 +210,7 @@ pub mod pallet {
 	// Default trader account fee
 	#[pallet::type_value]
 	pub fn DefaultForTraderAccountFee<T: Config>() -> BalanceOf<T> {
-		let fee = BalanceOf::<T>::from(0u32);
+		let fee = BalanceOf::<T>::from(100u32);
 
 		fee
 	}
@@ -218,7 +218,7 @@ pub mod pallet {
 	// Default project validator account fee
 	#[pallet::type_value]
 	pub fn DefaultForProjectValidatorAccountFee<T: Config>() -> BalanceOf<T> {
-		let fee = BalanceOf::<T>::from(0u32);
+		let fee = BalanceOf::<T>::from(100u32);
 
 		fee
 	}
@@ -226,7 +226,7 @@ pub mod pallet {
 	// Default project owner account fee
 	#[pallet::type_value]
 	pub fn DefaultForProjectOwnerAccountFee<T: Config>() -> BalanceOf<T> {
-		let fee = BalanceOf::<T>::from(0u32);
+		let fee = BalanceOf::<T>::from(100u32);
 
 		fee
 	}
@@ -402,15 +402,20 @@ pub mod pallet {
 
 			// Check if caller is already has a associated trader account
 			ensure!(
-				TraderAccounts::<T>::get().contains(&user.clone()),
+				!TraderAccounts::<T>::get().contains(&user.clone()),
 				Error::<T>::TraderAlreadyExists
 			);
 
 			// Check if caller has sufficient funds
 			ensure!(
-				T::Currency::free_balance(&user.clone()) <= TraderAccountFee::<T>::get(),
+				TraderAccountFee::<T>::get() <= T::Currency::free_balance(&user.clone()),
 				Error::<T>::InsufficientFunds
 			);
+
+			// Insert trader account
+			let mut new_traders = TraderAccounts::<T>::get();
+			new_traders.insert(user.clone());
+			TraderAccounts::<T>::set(new_traders);
 
 			// Deposit event
 			Self::deposit_event(Event::TraderAccountRegistered(user.clone()));
@@ -423,32 +428,40 @@ pub mod pallet {
 		#[pallet::weight(0)]
 		pub fn register_for_project_validator_account(
 			origin: OriginFor<T>,
-			ipfs: BoundedString<T::IPFSLength>,
+			documentation_ipfs: BoundedString<T::IPFSLength>,
 		) -> DispatchResultWithPostInfo {
 			let user = ensure_signed(origin)?;
 
 			// Check if caller is already has a associated project validator account
 			ensure!(
-				ProjectValidators::<T>::contains_key(&user.clone()),
+				!ProjectValidators::<T>::contains_key(&user.clone()),
 				Error::<T>::ProjectValidatorAlreadyExists
 			);
 
 			// Check if the documentation (IPFS link) has been used previously
 			ensure!(
-				Self::is_ipfs_available(ipfs.clone()),
+				Self::is_ipfs_available(documentation_ipfs.clone()),
 				Error::<T>::DocumentationWasUsedPreviously
 			);
 
 			// Check if caller has sufficient funds
 			ensure!(
-				T::Currency::free_balance(&user.clone()) <= ProjectValidatorAccountFee::<T>::get(),
+				ProjectValidatorAccountFee::<T>::get() <= T::Currency::free_balance(&user.clone()),
 				Error::<T>::InsufficientFunds
 			);
+
+			// Insert project validator account
+			let pvalidator_info: PVoPOInfo<T::IPFSLength, BlockNumber<T>> = PVoPOInfo {
+				documentation_ipfs: documentation_ipfs.clone(),
+				penalty_level: 0,
+				penalty_timeout: BlockNumber::<T>::from(0u32),
+			};
+			ProjectValidators::<T>::insert(user.clone(), pvalidator_info);
 
 			// Deposit event
 			Self::deposit_event(Event::ProjectValidatorAccountRegistered(
 				user.clone(),
-				ipfs.clone(),
+				documentation_ipfs.clone(),
 			));
 
 			Ok(().into())
@@ -459,30 +472,41 @@ pub mod pallet {
 		#[pallet::weight(0)]
 		pub fn register_for_project_owner_account(
 			origin: OriginFor<T>,
-			ipfs: BoundedString<T::IPFSLength>,
+			documentation_ipfs: BoundedString<T::IPFSLength>,
 		) -> DispatchResultWithPostInfo {
 			let user = ensure_signed(origin)?;
 
 			// Check if caller is already has a associated project owner account
 			ensure!(
-				ProjectOwners::<T>::contains_key(&user.clone()),
+				!ProjectOwners::<T>::contains_key(&user.clone()),
 				Error::<T>::ProjectOwnerAlreadyExists
 			);
 
 			// Check if the documentation (IPFS link) has been used previously
 			ensure!(
-				Self::is_ipfs_available(ipfs.clone()),
+				Self::is_ipfs_available(documentation_ipfs.clone()),
 				Error::<T>::DocumentationWasUsedPreviously
 			);
 
 			// Check if caller has sufficient funds
 			ensure!(
-				T::Currency::free_balance(&user.clone()) <= ProjectOwnerAccountFee::<T>::get(),
+				ProjectOwnerAccountFee::<T>::get() <= T::Currency::free_balance(&user.clone()),
 				Error::<T>::InsufficientFunds
 			);
 
+			// Insert project owner account
+			let powner_info: PVoPOInfo<T::IPFSLength, BlockNumber<T>> = PVoPOInfo {
+				documentation_ipfs: documentation_ipfs.clone(),
+				penalty_level: 0,
+				penalty_timeout: BlockNumber::<T>::from(0u32),
+			};
+			ProjectOwners::<T>::insert(user.clone(), powner_info);
+
 			// Deposit event
-			Self::deposit_event(Event::ProjectOwnerAccountRegistered(user.clone(), ipfs.clone()));
+			Self::deposit_event(Event::ProjectOwnerAccountRegistered(
+				user.clone(),
+				documentation_ipfs.clone(),
+			));
 
 			Ok(().into())
 		}
