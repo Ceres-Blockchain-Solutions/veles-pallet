@@ -2,6 +2,252 @@ use crate::{mock::*, Error};
 use frame_support::{assert_err, assert_ok};
 
 #[test]
+fn register_for_trader_account_trader_already_existst() {
+	new_test_ext().execute_with(|| {
+		// Go past genesis block so events get deposited
+		System::set_block_number(1);
+
+		// Insert trader account
+		let mut new_traders = TraderAccounts::<Test>::get();
+		new_traders.insert(alice());
+		TraderAccounts::<Test>::set(new_traders);
+
+		// Check for TraderAlreadyExists error
+		assert_err!(
+			Veles::register_for_trader_account(RuntimeOrigin::signed(alice()),),
+			Error::<Test>::TraderAlreadyExists
+		);
+	});
+}
+
+#[test]
+fn register_for_trader_account_insufficient_funds() {
+	new_test_ext().execute_with(|| {
+		// Go past genesis block so events get deposited
+		System::set_block_number(1);
+
+		// Check for InsufficientFunds error
+		assert_err!(
+			Veles::register_for_trader_account(RuntimeOrigin::signed(alice()),),
+			Error::<Test>::InsufficientFunds
+		);
+	});
+}
+
+#[test]
+fn register_for_trader_account_ok() {
+	new_test_ext().execute_with(|| {
+		// Go past genesis block so events get deposited
+		System::set_block_number(1);
+
+		// Registered trader account succesfully
+		assert_ok!(Veles::register_for_trader_account(RuntimeOrigin::signed(bob())));
+	});
+}
+
+#[test]
+fn register_for_project_validator_account_already_existst() {
+	new_test_ext().execute_with(|| {
+		// Create documentation IPFS
+		let documentation_ipfs =
+			BoundedString::<IPFSLength>::truncate_from("ipfs_pvalidator_documentation");
+
+		// Create project validator info
+		let pvalidator_info = PVoPOInfo {
+			documentation_ipfs: documentation_ipfs.clone(),
+			penalty_level: 0,
+			penalty_timeout: 0,
+		};
+
+		// Go past genesis block so events get deposited
+		System::set_block_number(1);
+
+		// Insert project validator
+		ProjectValidators::<Test>::insert(alice(), pvalidator_info);
+
+		// Check for ProjectValidatorAlreadyExists error
+		assert_err!(
+			Veles::register_for_project_validator_account(
+				RuntimeOrigin::signed(alice()),
+				documentation_ipfs
+			),
+			Error::<Test>::ProjectValidatorAlreadyExists
+		);
+	});
+}
+
+#[test]
+fn register_for_project_validator_account_documentation_was_used_previously() {
+	new_test_ext().execute_with(|| {
+		// Create documentation IPFS
+		let documentation_ipfs =
+			BoundedString::<IPFSLength>::truncate_from("ipfs_pvalidator_documentation");
+
+		// Create project validator info
+		let pvalidator_info = PVoPOInfo {
+			documentation_ipfs: documentation_ipfs.clone(),
+			penalty_level: 0,
+			penalty_timeout: 0,
+		};
+
+		// Go past genesis block so events get deposited
+		System::set_block_number(1);
+
+		// Insert project validator
+		ProjectValidators::<Test>::insert(alice(), pvalidator_info);
+
+		// Check for DocumentationWasUsedPreviously error
+		assert_err!(
+			Veles::register_for_project_validator_account(
+				RuntimeOrigin::signed(bob()),
+				documentation_ipfs
+			),
+			Error::<Test>::DocumentationWasUsedPreviously
+		);
+	});
+}
+
+#[test]
+fn register_for_project_validator_account_insufficient_funds() {
+	new_test_ext().execute_with(|| {
+		// Create documentation IPFS
+		let documentation_ipfs =
+			BoundedString::<IPFSLength>::truncate_from("ipfs_pvalidator_documentation");
+
+		// Go past genesis block so events get deposited
+		System::set_block_number(1);
+
+		// Check for InsufficientFunds error
+		assert_err!(
+			Veles::register_for_project_validator_account(
+				RuntimeOrigin::signed(alice()),
+				documentation_ipfs
+			),
+			Error::<Test>::InsufficientFunds
+		);
+	});
+}
+
+#[test]
+fn register_for_project_owner_account_insufficient_funds() {
+	new_test_ext().execute_with(|| {
+		// Create documentation IPFS
+		let documentation_ipfs =
+			BoundedString::<IPFSLength>::truncate_from("ipfs_powner_documentation");
+
+		// Go past genesis block so events get deposited
+		System::set_block_number(1);
+
+		// Check for InsufficientFunds error
+		assert_err!(
+			Veles::register_for_project_owner_account(
+				RuntimeOrigin::signed(alice()),
+				documentation_ipfs
+			),
+			Error::<Test>::InsufficientFunds
+		);
+	});
+}
+
+#[test]
+fn register_for_project_validator_account_ok() {
+	new_test_ext().execute_with(|| {
+		// Create documentation IPFS
+		let documentation_ipfs =
+			BoundedString::<IPFSLength>::truncate_from("ipfs_pvalidator_documentation");
+
+		// Go past genesis block so events get deposited
+		System::set_block_number(1);
+
+		// Registered project validator account succesfully
+		assert_ok!(Veles::register_for_project_validator_account(
+			RuntimeOrigin::signed(bob()),
+			documentation_ipfs
+		));
+	});
+}
+
+#[test]
+fn register_for_project_owner_account_already_existst() {
+	new_test_ext().execute_with(|| {
+		// Create documentation IPFS
+		let documentation_ipfs =
+			BoundedString::<IPFSLength>::truncate_from("ipfs_powner_documentation");
+
+		// Create project owner info
+		let powner_info = PVoPOInfo {
+			documentation_ipfs: documentation_ipfs.clone(),
+			penalty_level: 0,
+			penalty_timeout: 0,
+		};
+
+		// Go past genesis block so events get deposited
+		System::set_block_number(1);
+
+		// Insert project owner
+		ProjectOwners::<Test>::insert(alice(), powner_info);
+
+		// Check for ProjectOwnerAlreadyExists error
+		assert_err!(
+			Veles::register_for_project_owner_account(
+				RuntimeOrigin::signed(alice()),
+				documentation_ipfs
+			),
+			Error::<Test>::ProjectOwnerAlreadyExists
+		);
+	});
+}
+
+#[test]
+fn register_for_project_owner_account_documentation_was_used_previously() {
+	new_test_ext().execute_with(|| {
+		// Create documentation IPFS
+		let documentation_ipfs =
+			BoundedString::<IPFSLength>::truncate_from("ipfs_powner_documentation");
+
+		// Create project owner info
+		let powner_info = PVoPOInfo {
+			documentation_ipfs: documentation_ipfs.clone(),
+			penalty_level: 0,
+			penalty_timeout: 0,
+		};
+
+		// Go past genesis block so events get deposited
+		System::set_block_number(1);
+
+		// Insert project owner
+		ProjectOwners::<Test>::insert(alice(), powner_info);
+
+		// Check for DocumentationWasUsedPreviously error
+		assert_err!(
+			Veles::register_for_project_owner_account(
+				RuntimeOrigin::signed(bob()),
+				documentation_ipfs
+			),
+			Error::<Test>::DocumentationWasUsedPreviously
+		);
+	});
+}
+
+#[test]
+fn register_for_project_owner_account_ok() {
+	new_test_ext().execute_with(|| {
+		// Create documentation IPFS
+		let documentation_ipfs =
+			BoundedString::<IPFSLength>::truncate_from("ipfs_powner_documentation");
+
+		// Go past genesis block so events get deposited
+		System::set_block_number(1);
+
+		// Registered project owner account succesfully
+		assert_ok!(Veles::register_for_project_owner_account(
+			RuntimeOrigin::signed(bob()),
+			documentation_ipfs
+		));
+	});
+}
+
+#[test]
 fn cast_vote_unauthorized() {
 	new_test_ext().execute_with(|| {
 		// Create IPFS documentation link
