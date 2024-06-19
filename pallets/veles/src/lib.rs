@@ -207,7 +207,49 @@ pub mod pallet {
 		set
 	}
 
+	// Default trader account fee
+	#[pallet::type_value]
+	pub fn DefaultForTraderAccountFee<T: Config>() -> BalanceOf<T> {
+		let fee = BalanceOf::<T>::from(0u32);
+
+		fee
+	}
+
+	// Default project validator account fee
+	#[pallet::type_value]
+	pub fn DefaultForProjectValidatorAccountFee<T: Config>() -> BalanceOf<T> {
+		let fee = BalanceOf::<T>::from(0u32);
+
+		fee
+	}
+
+	// Default project owner account fee
+	#[pallet::type_value]
+	pub fn DefaultForProjectOwnerAccountFee<T: Config>() -> BalanceOf<T> {
+		let fee = BalanceOf::<T>::from(0u32);
+
+		fee
+	}
+
 	/// Pallet storages
+	// Trader account fee
+	#[pallet::storage]
+	#[pallet::getter(fn trader_account_fee)]
+	pub type TraderAccountFee<T: Config> =
+		StorageValue<_, BalanceOf<T>, ValueQuery, DefaultForTraderAccountFee<T>>;
+
+	// Project validator account fee
+	#[pallet::storage]
+	#[pallet::getter(fn project_validator_account_fee)]
+	pub type ProjectValidatorAccountFee<T: Config> =
+		StorageValue<_, BalanceOf<T>, ValueQuery, DefaultForProjectValidatorAccountFee<T>>;
+
+	// Project owner account fee
+	#[pallet::storage]
+	#[pallet::getter(fn project_owner_account_fee)]
+	pub type ProjectOwnerAccountFee<T: Config> =
+		StorageValue<_, BalanceOf<T>, ValueQuery, DefaultForProjectOwnerAccountFee<T>>;
+
 	// Authority accounts
 	#[pallet::storage]
 	#[pallet::getter(fn authority_accounts)]
@@ -306,6 +348,12 @@ pub mod pallet {
 	#[pallet::event]
 	#[pallet::generate_deposit(pub (super) fn deposit_event)]
 	pub enum Event<T: Config> {
+		/// Trader Account Registered
+		TraderAccountRegistered(AccountIdOf<T>),
+		/// Project Validator Account Registered
+		ProjectValidatorAccountRegistered(AccountIdOf<T>, BoundedString<T::IPFSLength>),
+		/// Project Owner Account Registered
+		ProjectOwnerAccountRegistered(AccountIdOf<T>, BoundedString<T::IPFSLength>),
 		/// Successful Vote Cast
 		SuccessfulVote(AccountIdOf<T>, BoundedString<T::IPFSLength>),
 		/// Successful Project Proposal Created
@@ -316,6 +364,14 @@ pub mod pallet {
 
 	#[pallet::error]
 	pub enum Error<T> {
+		/// Trader already exists
+		TraderAlreadyExists,
+		/// Project validator already exists
+		ProjectValidatorAlreadyExists,
+		/// Project validator already exists
+		ProjectOwnerAlreadyExists,
+		/// Insufficient funds
+		InsufficientFunds,
 		/// Report not found
 		CFReportNotFound,
 		/// Not Authorized
@@ -338,8 +394,101 @@ pub mod pallet {
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
-		// Vote for/against Carbon Deficit Reports or for/against project Proposals
+		// Register for a trader account
 		#[pallet::call_index(0)]
+		#[pallet::weight(0)]
+		pub fn register_for_trader_account(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
+			let user = ensure_signed(origin)?;
+
+			// Check if caller is already has a associated trader account
+			ensure!(
+				TraderAccounts::<T>::get().contains(&user.clone()),
+				Error::<T>::TraderAlreadyExists
+			);
+
+			// Check if caller has sufficient funds
+			ensure!(
+				T::Currency::free_balance(&user.clone()) <= TraderAccountFee::<T>::get(),
+				Error::<T>::InsufficientFunds
+			);
+
+			// Deposit event
+			Self::deposit_event(Event::TraderAccountRegistered(user.clone()));
+
+			Ok(().into())
+		}
+
+		// Register for a project validator account
+		#[pallet::call_index(1)]
+		#[pallet::weight(0)]
+		pub fn register_for_project_validator_account(
+			origin: OriginFor<T>,
+			ipfs: BoundedString<T::IPFSLength>,
+		) -> DispatchResultWithPostInfo {
+			let user = ensure_signed(origin)?;
+
+			// Check if caller is already has a associated project validator account
+			ensure!(
+				ProjectValidators::<T>::contains_key(&user.clone()),
+				Error::<T>::ProjectValidatorAlreadyExists
+			);
+
+			// Check if the documentation (IPFS link) has been used previously
+			ensure!(
+				Self::is_ipfs_available(ipfs.clone()),
+				Error::<T>::DocumentationWasUsedPreviously
+			);
+
+			// Check if caller has sufficient funds
+			ensure!(
+				T::Currency::free_balance(&user.clone()) <= ProjectValidatorAccountFee::<T>::get(),
+				Error::<T>::InsufficientFunds
+			);
+
+			// Deposit event
+			Self::deposit_event(Event::ProjectValidatorAccountRegistered(
+				user.clone(),
+				ipfs.clone(),
+			));
+
+			Ok(().into())
+		}
+
+		// Register for a project owner account
+		#[pallet::call_index(2)]
+		#[pallet::weight(0)]
+		pub fn register_for_project_owner_account(
+			origin: OriginFor<T>,
+			ipfs: BoundedString<T::IPFSLength>,
+		) -> DispatchResultWithPostInfo {
+			let user = ensure_signed(origin)?;
+
+			// Check if caller is already has a associated project owner account
+			ensure!(
+				ProjectOwners::<T>::contains_key(&user.clone()),
+				Error::<T>::ProjectOwnerAlreadyExists
+			);
+
+			// Check if the documentation (IPFS link) has been used previously
+			ensure!(
+				Self::is_ipfs_available(ipfs.clone()),
+				Error::<T>::DocumentationWasUsedPreviously
+			);
+
+			// Check if caller has sufficient funds
+			ensure!(
+				T::Currency::free_balance(&user.clone()) <= ProjectOwnerAccountFee::<T>::get(),
+				Error::<T>::InsufficientFunds
+			);
+
+			// Deposit event
+			Self::deposit_event(Event::ProjectOwnerAccountRegistered(user.clone(), ipfs.clone()));
+
+			Ok(().into())
+		}
+
+		// Vote for/against Carbon Deficit Reports or for/against project Proposals
+		#[pallet::call_index(3)]
 		#[pallet::weight(0)]
 		pub fn cast_vote(
 			origin: OriginFor<T>,
@@ -419,7 +568,7 @@ pub mod pallet {
 		}
 
 		// Propose project
-		#[pallet::call_index(1)]
+		#[pallet::call_index(4)]
 		#[pallet::weight(0)]
 		pub fn propose_project(
 			origin: OriginFor<T>,
@@ -437,7 +586,10 @@ pub mod pallet {
 			);
 
 			// Check if the documentation (IPFS link) has been used previously
-			ensure!(Self::is_ipfs_available(ipfs.clone()), Error::<T>::DocumentationWasUsedPreviously);
+			ensure!(
+				Self::is_ipfs_available(ipfs.clone()),
+				Error::<T>::DocumentationWasUsedPreviously
+			);
 
 			// Get time
 			let creation_date = T::Time::now();
@@ -466,7 +618,7 @@ pub mod pallet {
 		}
 
 		// Propose carbon credit batch
-		#[pallet::call_index(2)]
+		#[pallet::call_index(5)]
 		#[pallet::weight(0)]
 		pub fn propose_carbon_credit_batch(
 			origin: OriginFor<T>,
@@ -488,7 +640,10 @@ pub mod pallet {
 			ensure!(project_proposal.project_owner == user, Error::<T>::Unauthorized);
 
 			// Check if the documentation (IPFS link) has been used previously
-			ensure!(Self::is_ipfs_available(ipfs.clone()), Error::<T>::DocumentationWasUsedPreviously);
+			ensure!(
+				Self::is_ipfs_available(ipfs.clone()),
+				Error::<T>::DocumentationWasUsedPreviously
+			);
 
 			// Create batch hash
 			let nonce = frame_system::Pallet::<T>::account_nonce(&user);
@@ -563,8 +718,8 @@ pub mod pallet {
 			// Check in carbon footprint, trader, project validator and project owner accounts
 			if CarbonFootprintAccounts::<T>::contains_key(account_id.clone())
 				|| TraderAccounts::<T>::get().contains(&account_id.clone())
-				|| ProjectValidators::<T>::contains_key(account_id.clone()) 
-				|| ProjectOwners::<T>::contains_key(account_id.clone()) 
+				|| ProjectValidators::<T>::contains_key(account_id.clone())
+				|| ProjectOwners::<T>::contains_key(account_id.clone())
 			{
 				return false;
 			}
