@@ -174,6 +174,17 @@ pub enum TimeoutType {
 	Sales,   // Sales timeout type
 }
 
+// Fee type
+#[derive(
+	Encode, Decode, PartialEq, Eq, Ord, PartialOrd, MaxEncodedLen, scale_info::TypeInfo, Clone,
+)]
+#[cfg_attr(feature = "std", derive(Debug))]
+pub enum FeeType {
+	TraderAccountFee,           // Trader acccount registration fee
+	ProjectValidatorAccountFee, // Project validator account registration fee
+	ProjectOwnerAccountFee,     // Project owner account registration fee
+}
+
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
@@ -287,6 +298,12 @@ pub mod pallet {
 	pub type ProjectValidatorAccountFee<T: Config> =
 		StorageValue<_, BalanceOf<T>, ValueQuery, DefaultForProjectValidatorAccountFee<T>>;
 
+	// Project owner account fee
+	#[pallet::storage]
+	#[pallet::getter(fn project_owner_account_fee)]
+	pub type ProjectOwnerAccountFee<T: Config> =
+		StorageValue<_, BalanceOf<T>, ValueQuery, DefaultForProjectOwnerAccountFee<T>>;
+
 	// Penalty timeout time
 	#[pallet::storage]
 	#[pallet::getter(fn penalty_timeout_time)]
@@ -304,12 +321,6 @@ pub mod pallet {
 	#[pallet::getter(fn sales_timeout_time)]
 	pub type SalesTimeoutTime<T: Config> =
 		StorageValue<_, BlockNumber<T>, ValueQuery, DefaultForSalesTimeoutTime<T>>;
-
-	// Project owner account fee
-	#[pallet::storage]
-	#[pallet::getter(fn project_owner_account_fee)]
-	pub type ProjectOwnerAccountFee<T: Config> =
-		StorageValue<_, BalanceOf<T>, ValueQuery, DefaultForProjectOwnerAccountFee<T>>;
 
 	// Authority accounts
 	#[pallet::storage]
@@ -428,6 +439,8 @@ pub mod pallet {
 	pub enum Event<T: Config> {
 		/// Timeout time updated
 		TimeoutTimeUpdated(TimeoutType, BlockNumber<T>),
+		/// Fee amount updated
+		FeeAmountUpdated(FeeType, BalanceOf<T>),
 		/// Trader Account Registered
 		TraderAccountRegistered(AccountIdOf<T>),
 		/// Project Validator Account Registered
@@ -515,8 +528,41 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		// Register for a trader account
+		// Change specific fee amount
 		#[pallet::call_index(1)]
+		#[pallet::weight(0)]
+		pub fn change_fee_amount(
+			origin: OriginFor<T>,
+			fee_type: FeeType,
+			new_fee_amount: BalanceOf<T>,
+		) -> DispatchResultWithPostInfo {
+			let user = ensure_signed(origin)?;
+
+			// Check if caller is a Authority account
+			ensure!(
+				AuthorityAccounts::<T>::get().contains(&user.clone()),
+				Error::<T>::Unauthorized
+			);
+
+			match fee_type {
+				FeeType::TraderAccountFee => {
+					TraderAccountFee::<T>::set(new_fee_amount);
+				},
+				FeeType::ProjectValidatorAccountFee => {
+					ProjectValidatorAccountFee::<T>::set(new_fee_amount);
+				},
+				FeeType::ProjectOwnerAccountFee => {
+					ProjectOwnerAccountFee::<T>::set(new_fee_amount);
+				},
+			}
+
+			Self::deposit_event(Event::FeeAmountUpdated(fee_type, new_fee_amount));
+
+			Ok(().into())
+		}
+
+		// Register for a trader account
+		#[pallet::call_index(2)]
 		#[pallet::weight(0)]
 		pub fn register_for_trader_account(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
 			let user = ensure_signed(origin)?;
@@ -545,7 +591,7 @@ pub mod pallet {
 		}
 
 		// Register for a project validator account
-		#[pallet::call_index(2)]
+		#[pallet::call_index(3)]
 		#[pallet::weight(0)]
 		pub fn register_for_project_validator_account(
 			origin: OriginFor<T>,
@@ -589,7 +635,7 @@ pub mod pallet {
 		}
 
 		// Register for a project owner account
-		#[pallet::call_index(3)]
+		#[pallet::call_index(4)]
 		#[pallet::weight(0)]
 		pub fn register_for_project_owner_account(
 			origin: OriginFor<T>,
@@ -633,7 +679,7 @@ pub mod pallet {
 		}
 
 		// Vote for/against Carbon Deficit Reports or for/against project Proposals
-		#[pallet::call_index(4)]
+		#[pallet::call_index(5)]
 		#[pallet::weight(0)]
 		pub fn cast_vote(
 			origin: OriginFor<T>,
@@ -713,7 +759,7 @@ pub mod pallet {
 		}
 
 		// Propose project
-		#[pallet::call_index(5)]
+		#[pallet::call_index(6)]
 		#[pallet::weight(0)]
 		pub fn propose_project(
 			origin: OriginFor<T>,
@@ -763,7 +809,7 @@ pub mod pallet {
 		}
 
 		// Propose carbon credit batch
-		#[pallet::call_index(6)]
+		#[pallet::call_index(7)]
 		#[pallet::weight(0)]
 		pub fn propose_carbon_credit_batch(
 			origin: OriginFor<T>,
