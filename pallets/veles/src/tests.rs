@@ -2,6 +2,108 @@ use crate::{mock::*, Error};
 use frame_support::{assert_err, assert_ok};
 
 #[test]
+fn change_timeout_time_unauthorized() {
+	new_test_ext().execute_with(|| {
+		// Go past genesis block so events get deposited
+		System::set_block_number(1);
+
+		// Check for Unauthorized error
+		assert_err!(
+			Veles::change_timeout_time(RuntimeOrigin::signed(alice()), TimeoutType::Penalty, 0),
+			Error::<Test>::Unauthorized
+		);
+	});
+}
+
+#[test]
+fn change_timeout_time_invalid_timeout_value() {
+	new_test_ext().execute_with(|| {
+		// Go past genesis block so events get deposited
+		System::set_block_number(1);
+
+		// Insert authority account
+		let mut new_authorities = AuthorityAccounts::<Test>::get();
+		new_authorities.insert(alice());
+		AuthorityAccounts::<Test>::set(new_authorities);
+
+		// Check for Unauthorized error
+		assert_err!(
+			Veles::change_timeout_time(RuntimeOrigin::signed(alice()), TimeoutType::Penalty, 0),
+			Error::<Test>::InvalidTimeoutValue
+		);
+	});
+}
+
+#[test]
+fn change_timeout_time_ok_penalty() {
+	new_test_ext().execute_with(|| {
+		// Go past genesis block so events get deposited
+		System::set_block_number(1);
+
+		// Insert authority account
+		let mut new_authorities = AuthorityAccounts::<Test>::get();
+		new_authorities.insert(alice());
+		AuthorityAccounts::<Test>::set(new_authorities);
+
+		// Check for Unauthorized error
+		assert_ok!(Veles::change_timeout_time(
+			RuntimeOrigin::signed(alice()),
+			TimeoutType::Penalty,
+			1
+		));
+
+		// Check updated timeout time
+		assert_eq!(PenaltyTimeoutTime::<Test>::get(), 1);
+	});
+}
+
+#[test]
+fn change_timeout_time_ok_voting() {
+	new_test_ext().execute_with(|| {
+		// Go past genesis block so events get deposited
+		System::set_block_number(1);
+
+		// Insert authority account
+		let mut new_authorities = AuthorityAccounts::<Test>::get();
+		new_authorities.insert(alice());
+		AuthorityAccounts::<Test>::set(new_authorities);
+
+		// Check for Unauthorized error
+		assert_ok!(Veles::change_timeout_time(
+			RuntimeOrigin::signed(alice()),
+			TimeoutType::Voting,
+			1
+		));
+
+		// Check updated timeout time
+		assert_eq!(VotingTimeoutTime::<Test>::get(), 1);
+	});
+}
+
+#[test]
+fn change_timeout_time_ok_sales() {
+	new_test_ext().execute_with(|| {
+		// Go past genesis block so events get deposited
+		System::set_block_number(1);
+
+		// Insert authority account
+		let mut new_authorities = AuthorityAccounts::<Test>::get();
+		new_authorities.insert(alice());
+		AuthorityAccounts::<Test>::set(new_authorities);
+
+		// Check for Unauthorized error
+		assert_ok!(Veles::change_timeout_time(
+			RuntimeOrigin::signed(alice()),
+			TimeoutType::Sales,
+			1
+		));
+
+		// Check updated timeout time
+		assert_eq!(SalesTimeoutTime::<Test>::get(), 1);
+	});
+}
+
+#[test]
 fn register_for_trader_account_trader_already_existst() {
 	new_test_ext().execute_with(|| {
 		// Go past genesis block so events get deposited
