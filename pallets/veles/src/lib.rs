@@ -1,6 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-pub use codec::{Decode, Encode};
+pub use codec::{Decode, Encode, MaxEncodedLen};
 pub use common::BoundedString;
 pub use frame_support::pallet_prelude::Get;
 pub use frame_support::traits::Currency;
@@ -151,6 +151,14 @@ pub enum CCBStatus {
 	Active,   // Tokens can be traded and retired
 	Frozen,   // Tokens can't be traded or retired
 	Redacted, // Tokens have been removed from circulation
+}
+
+// Penalty type
+#[derive(Encode, Decode, PartialEq, Eq, Ord, PartialOrd, MaxEncodedLen, scale_info::TypeInfo, Clone)]
+#[cfg_attr(feature = "std", derive(Debug))]
+pub enum PenaltyType<AccountIdOf> {
+	AccountId(AccountIdOf),		// Penalty for a AccountId related entity (Project validator, Project owner)
+	Hash(H256),					// Penalty for a hash related entity (Project, Token batch)
 }
 
 #[frame_support::pallet]
@@ -305,7 +313,19 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn penalty_timeouts)]
 	pub(super) type PenaltyTimeouts<T: Config> =
-		StorageMap<_, Identity, BlockNumber<T>, BTreeSet<AccountIdOf<T>>, OptionQuery>;
+		StorageMap<_, Identity, BlockNumber<T>, BTreeSet<PenaltyType<AccountIdOf<T>>>, OptionQuery>;
+
+	// Voting timeouts
+	#[pallet::storage]
+	#[pallet::getter(fn voting_timeouts)]
+	pub(super) type VotingTimeouts<T: Config> =
+		StorageMap<_, Identity, BlockNumber<T>, BTreeSet<BoundedString<T::IPFSLength>>, OptionQuery>;
+
+	// Sales timeouts
+	#[pallet::storage]
+	#[pallet::getter(fn sales_timeouts)]
+	pub(super) type SalesTimeouts<T: Config> =
+		StorageMap<_, Identity, BlockNumber<T>, BTreeSet<H256>, OptionQuery>;
 
 	// Carbon footprint reports
 	#[pallet::storage]
