@@ -159,7 +159,6 @@ pub mod pallet {
 	use frame_support::pallet_prelude::*;
 	use frame_support::traits::Time;
 	use frame_system::pallet_prelude::*;
-	// use hex_literal::hex;
 	use frame_support::traits::ReservableCurrency;
 	use sp_std::collections::btree_set::BTreeSet;
 
@@ -191,10 +190,6 @@ pub mod pallet {
 	#[pallet::type_value]
 	pub fn DefaultForAuthorityAccounts<T: Config>() -> BTreeSet<AccountIdOf<T>> {
 		let set: BTreeSet<AccountIdOf<T>> = BTreeSet::<AccountIdOf<T>>::new();
-
-		// let bytes_1 = hex!("fed77d0df3f5068d8a875e5ae7c3248ba7c602439623cab507206af8e50edd4b");
-		// let account_1 = AccountIdOf::<T>::decode(&mut &bytes_1[..]).unwrap();
-		// set.insert(account_1);
 
 		set
 	}
