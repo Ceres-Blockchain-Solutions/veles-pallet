@@ -26,7 +26,7 @@ fn change_timeout_time_invalid_timeout_value() {
 		new_authorities.insert(alice());
 		AuthorityAccounts::<Test>::set(new_authorities);
 
-		// Check for Unauthorized error
+		// Check for InvalidTimeoutValue error
 		assert_err!(
 			Veles::change_timeout_time(RuntimeOrigin::signed(alice()), TimeoutType::Penalty, 0),
 			Error::<Test>::InvalidTimeoutValue
@@ -45,7 +45,7 @@ fn change_timeout_time_ok_penalty() {
 		new_authorities.insert(alice());
 		AuthorityAccounts::<Test>::set(new_authorities);
 
-		// Check for Unauthorized error
+		// Update timeout time
 		assert_ok!(Veles::change_timeout_time(
 			RuntimeOrigin::signed(alice()),
 			TimeoutType::Penalty,
@@ -68,7 +68,7 @@ fn change_timeout_time_ok_voting() {
 		new_authorities.insert(alice());
 		AuthorityAccounts::<Test>::set(new_authorities);
 
-		// Check for Unauthorized error
+		// Update timeout time
 		assert_ok!(Veles::change_timeout_time(
 			RuntimeOrigin::signed(alice()),
 			TimeoutType::Voting,
@@ -91,7 +91,7 @@ fn change_timeout_time_ok_sales() {
 		new_authorities.insert(alice());
 		AuthorityAccounts::<Test>::set(new_authorities);
 
-		// Check for Unauthorized error
+		// Update timeout time
 		assert_ok!(Veles::change_timeout_time(
 			RuntimeOrigin::signed(alice()),
 			TimeoutType::Sales,
@@ -100,6 +100,89 @@ fn change_timeout_time_ok_sales() {
 
 		// Check updated timeout time
 		assert_eq!(SalesTimeoutTime::<Test>::get(), 1);
+	});
+}
+
+#[test]
+fn change_fee_amount_unauthorized() {
+	new_test_ext().execute_with(|| {
+		// Go past genesis block so events get deposited
+		System::set_block_number(1);
+
+		// Check for Unauthorized error
+		assert_err!(
+			Veles::change_fee_amount(RuntimeOrigin::signed(alice()), FeeType::TraderAccountFee, 0),
+			Error::<Test>::Unauthorized
+		);
+	});
+}
+
+#[test]
+fn change_fee_amount_ok_trader_account_fee() {
+	new_test_ext().execute_with(|| {
+		// Go past genesis block so events get deposited
+		System::set_block_number(1);
+
+		// Insert authority account
+		let mut new_authorities = AuthorityAccounts::<Test>::get();
+		new_authorities.insert(alice());
+		AuthorityAccounts::<Test>::set(new_authorities);
+
+		// Update fee amount
+		assert_ok!(Veles::change_fee_amount(
+			RuntimeOrigin::signed(alice()),
+			FeeType::TraderAccountFee,
+			0
+		));
+
+		// Check updated fee amount
+		assert_eq!(TraderAccountFee::<Test>::get(), 0);
+	});
+}
+
+#[test]
+fn change_fee_amount_ok_project_validator_account_fee() {
+	new_test_ext().execute_with(|| {
+		// Go past genesis block so events get deposited
+		System::set_block_number(1);
+
+		// Insert authority account
+		let mut new_authorities = AuthorityAccounts::<Test>::get();
+		new_authorities.insert(alice());
+		AuthorityAccounts::<Test>::set(new_authorities);
+
+		// Update fee amount
+		assert_ok!(Veles::change_fee_amount(
+			RuntimeOrigin::signed(alice()),
+			FeeType::ProjectValidatorAccountFee,
+			0
+		));
+
+		// Check updated fee amount
+		assert_eq!(ProjectValidatorAccountFee::<Test>::get(), 0);
+	});
+}
+
+#[test]
+fn change_fee_amount_ok_project_owner_account_fee_fee() {
+	new_test_ext().execute_with(|| {
+		// Go past genesis block so events get deposited
+		System::set_block_number(1);
+
+		// Insert authority account
+		let mut new_authorities = AuthorityAccounts::<Test>::get();
+		new_authorities.insert(alice());
+		AuthorityAccounts::<Test>::set(new_authorities);
+
+		// Update fee amount
+		assert_ok!(Veles::change_fee_amount(
+			RuntimeOrigin::signed(alice()),
+			FeeType::ProjectOwnerAccountFee,
+			0
+		));
+
+		// Check updated fee amount
+		assert_eq!(ProjectOwnerAccountFee::<Test>::get(), 0);
 	});
 }
 
