@@ -154,20 +154,33 @@ pub enum CCBStatus {
 }
 
 // Penalty type
-#[derive(Encode, Decode, PartialEq, Eq, Ord, PartialOrd, MaxEncodedLen, scale_info::TypeInfo, Clone)]
+#[derive(
+	Encode, Decode, PartialEq, Eq, Ord, PartialOrd, MaxEncodedLen, scale_info::TypeInfo, Clone,
+)]
 #[cfg_attr(feature = "std", derive(Debug))]
 pub enum PenaltyType<AccountIdOf> {
-	AccountId(AccountIdOf),		// Penalty for a AccountId related entity (Project validator, Project owner)
-	Hash(H256),					// Penalty for a hash related entity (Project, Token batch)
+	AccountId(AccountIdOf), // Penalty for a AccountId related entity (Project validator, Project owner)
+	Hash(H256),             // Penalty for a hash related entity (Project, Token batch)
+}
+
+// Timeout type
+#[derive(
+	Encode, Decode, PartialEq, Eq, Ord, PartialOrd, MaxEncodedLen, scale_info::TypeInfo, Clone,
+)]
+#[cfg_attr(feature = "std", derive(Debug))]
+pub enum TimeoutType {
+	Penalty, // Penalty timeout type
+	Voting,  // Voting timeout type
+	Sales,   // Sales timeout type
 }
 
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
 	use frame_support::pallet_prelude::*;
+	use frame_support::traits::ReservableCurrency;
 	use frame_support::traits::Time;
 	use frame_system::pallet_prelude::*;
-	use frame_support::traits::ReservableCurrency;
 	use sp_std::collections::btree_set::BTreeSet;
 
 	#[pallet::pallet]
@@ -234,6 +247,33 @@ pub mod pallet {
 		fee
 	}
 
+	// Default penalty timeout time [in blocks]
+	#[pallet::type_value]
+	pub fn DefaultForPenaltyTimeoutTime<T: Config>() -> BlockNumber<T> {
+		let timeout_time: u32 = 31 * 24 * 60 * 60; // A MONTH in seconds
+		let block_finalization_time: u32 = 8; // Predefined block finalization time
+
+		BlockNumber::<T>::from(timeout_time / block_finalization_time)
+	}
+
+	// Default voting timeout time [in blocks]
+	#[pallet::type_value]
+	pub fn DefaultForVotingTimeoutTime<T: Config>() -> BlockNumber<T> {
+		let timeout_time: u32 = 7 * 24 * 60 * 60; // A WEEK in seconds
+		let block_finalization_time: u32 = 8; // Predefined block finalization time
+
+		BlockNumber::<T>::from(timeout_time / block_finalization_time)
+	}
+
+	// Default sales timeout time [in blocks]
+	#[pallet::type_value]
+	pub fn DefaultForSalesTimeoutTime<T: Config>() -> BlockNumber<T> {
+		let timeout_time: u32 = 7 * 24 * 60 * 60; // A WEEK in seconds
+		let block_finalization_time: u32 = 8; // Predefined block finalization time
+
+		BlockNumber::<T>::from(timeout_time / block_finalization_time)
+	}
+
 	/// Pallet storages
 	// Trader account fee
 	#[pallet::storage]
@@ -246,6 +286,24 @@ pub mod pallet {
 	#[pallet::getter(fn project_validator_account_fee)]
 	pub type ProjectValidatorAccountFee<T: Config> =
 		StorageValue<_, BalanceOf<T>, ValueQuery, DefaultForProjectValidatorAccountFee<T>>;
+
+	// Penalty timeout time
+	#[pallet::storage]
+	#[pallet::getter(fn penalty_timeout_time)]
+	pub type PenaltyTimeoutTime<T: Config> =
+		StorageValue<_, BlockNumber<T>, ValueQuery, DefaultForPenaltyTimeoutTime<T>>;
+
+	// Voting timeout time
+	#[pallet::storage]
+	#[pallet::getter(fn voting_timeout_time)]
+	pub type VotingTimeoutTime<T: Config> =
+		StorageValue<_, BlockNumber<T>, ValueQuery, DefaultForVotingTimeoutTime<T>>;
+
+	// Sales timeout time
+	#[pallet::storage]
+	#[pallet::getter(fn sales_timeout_time)]
+	pub type SalesTimeoutTime<T: Config> =
+		StorageValue<_, BlockNumber<T>, ValueQuery, DefaultForSalesTimeoutTime<T>>;
 
 	// Project owner account fee
 	#[pallet::storage]
@@ -318,8 +376,13 @@ pub mod pallet {
 	// Voting timeouts
 	#[pallet::storage]
 	#[pallet::getter(fn voting_timeouts)]
-	pub(super) type VotingTimeouts<T: Config> =
-		StorageMap<_, Identity, BlockNumber<T>, BTreeSet<BoundedString<T::IPFSLength>>, OptionQuery>;
+	pub(super) type VotingTimeouts<T: Config> = StorageMap<
+		_,
+		Identity,
+		BlockNumber<T>,
+		BTreeSet<BoundedString<T::IPFSLength>>,
+		OptionQuery,
+	>;
 
 	// Sales timeouts
 	#[pallet::storage]
@@ -363,6 +426,8 @@ pub mod pallet {
 	#[pallet::event]
 	#[pallet::generate_deposit(pub (super) fn deposit_event)]
 	pub enum Event<T: Config> {
+		/// Timeout time updated
+		TimeoutTimeUpdated(TimeoutType, BlockNumber<T>),
 		/// Trader Account Registered
 		TraderAccountRegistered(AccountIdOf<T>),
 		/// Project Validator Account Registered
@@ -370,7 +435,7 @@ pub mod pallet {
 		/// Project Owner Account Registered
 		ProjectOwnerAccountRegistered(AccountIdOf<T>, BoundedString<T::IPFSLength>),
 		/// Successful Vote Cast
-		SuccessfulVote(AccountIdOf<T>, BoundedString<T::IPFSLength>),
+		SuccessfulVote(AccountIdOf<T>, BoundedString<T::IPFSLength>, VoteType, bool),
 		/// Successful Project Proposal Created
 		ProjectProposalCreated(AccountIdOf<T>, BoundedString<T::IPFSLength>),
 		/// Carbon Credit Batch Proposal Created
@@ -391,6 +456,8 @@ pub mod pallet {
 		CFReportNotFound,
 		/// Not Authorized
 		Unauthorized,
+		/// Invalid timeout value
+		InvalidTimeoutValue,
 		/// Documentation (IPFS link) was used previously
 		DocumentationWasUsedPreviously,
 		/// Vote already submitted
@@ -409,8 +476,47 @@ pub mod pallet {
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
-		// Register for a trader account
+		// Change specific timeout time
 		#[pallet::call_index(0)]
+		#[pallet::weight(0)]
+		pub fn change_timeout_time(
+			origin: OriginFor<T>,
+			timeout_type: TimeoutType,
+			new_timeout_time: BlockNumber<T>,
+		) -> DispatchResultWithPostInfo {
+			let user = ensure_signed(origin)?;
+
+			// Check if caller is a Authority account
+			ensure!(
+				AuthorityAccounts::<T>::get().contains(&user.clone()),
+				Error::<T>::Unauthorized
+			);
+
+			// Check if the new timeout time is not 0
+			ensure!(
+				new_timeout_time != BlockNumber::<T>::from(0u32),
+				Error::<T>::InvalidTimeoutValue
+			);
+
+			match timeout_type {
+				TimeoutType::Penalty => {
+					PenaltyTimeoutTime::<T>::set(new_timeout_time);
+				},
+				TimeoutType::Voting => {
+					VotingTimeoutTime::<T>::set(new_timeout_time);
+				},
+				TimeoutType::Sales => {
+					SalesTimeoutTime::<T>::set(new_timeout_time);
+				},
+			}
+
+			Self::deposit_event(Event::TimeoutTimeUpdated(timeout_type, new_timeout_time));
+
+			Ok(().into())
+		}
+
+		// Register for a trader account
+		#[pallet::call_index(1)]
 		#[pallet::weight(0)]
 		pub fn register_for_trader_account(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
 			let user = ensure_signed(origin)?;
@@ -439,7 +545,7 @@ pub mod pallet {
 		}
 
 		// Register for a project validator account
-		#[pallet::call_index(1)]
+		#[pallet::call_index(2)]
 		#[pallet::weight(0)]
 		pub fn register_for_project_validator_account(
 			origin: OriginFor<T>,
@@ -483,7 +589,7 @@ pub mod pallet {
 		}
 
 		// Register for a project owner account
-		#[pallet::call_index(2)]
+		#[pallet::call_index(3)]
 		#[pallet::weight(0)]
 		pub fn register_for_project_owner_account(
 			origin: OriginFor<T>,
@@ -527,7 +633,7 @@ pub mod pallet {
 		}
 
 		// Vote for/against Carbon Deficit Reports or for/against project Proposals
-		#[pallet::call_index(3)]
+		#[pallet::call_index(4)]
 		#[pallet::weight(0)]
 		pub fn cast_vote(
 			origin: OriginFor<T>,
@@ -601,13 +707,13 @@ pub mod pallet {
 				},
 			}
 
-			Self::deposit_event(Event::SuccessfulVote(user.clone(), ipfs.clone()));
+			Self::deposit_event(Event::SuccessfulVote(user.clone(), ipfs.clone(), vote_type, vote));
 
 			Ok(().into())
 		}
 
 		// Propose project
-		#[pallet::call_index(4)]
+		#[pallet::call_index(5)]
 		#[pallet::weight(0)]
 		pub fn propose_project(
 			origin: OriginFor<T>,
@@ -657,7 +763,7 @@ pub mod pallet {
 		}
 
 		// Propose carbon credit batch
-		#[pallet::call_index(5)]
+		#[pallet::call_index(6)]
 		#[pallet::weight(0)]
 		pub fn propose_carbon_credit_batch(
 			origin: OriginFor<T>,
