@@ -57,6 +57,8 @@ pub struct CFReportInfo<AccountIdOf, MomentOf> {
 	votes_for: BTreeSet<AccountIdOf>,
 	// Votes against
 	votes_against: BTreeSet<AccountIdOf>,
+	// Voting status
+	voting_active: bool,
 }
 
 // Project Proposal info structure
@@ -73,6 +75,8 @@ pub struct ProjectProposalInfo<AccountIdOf, MomentOf> {
 	votes_for: BTreeSet<AccountIdOf>,
 	// Votes against
 	votes_against: BTreeSet<AccountIdOf>,
+	// Voting status
+	voting_active: bool,
 }
 
 // Carbon Credit Batch Proposal info structure
@@ -93,6 +97,8 @@ pub struct CCBProposalInfo<MomentOf, BalanceOf, AccountIdOf> {
 	votes_for: BTreeSet<AccountIdOf>,
 	// Votes against
 	votes_against: BTreeSet<AccountIdOf>,
+	// Voting status
+	voting_active: bool,
 }
 
 // Projects info structure
