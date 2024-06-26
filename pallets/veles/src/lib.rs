@@ -153,20 +153,8 @@ pub enum CCBStatus {
 	Redacted, // Tokens have been removed from circulation
 }
 
-// Penalty type
-#[derive(
-	Encode, Decode, PartialEq, Eq, Ord, PartialOrd, MaxEncodedLen, scale_info::TypeInfo, Clone,
-)]
-#[cfg_attr(feature = "std", derive(Debug))]
-pub enum PenaltyType<AccountIdOf> {
-	AccountId(AccountIdOf), // Penalty for a AccountId related entity (Project validator, Project owner)
-	Hash(H256),             // Penalty for a hash related entity (Project, Token batch)
-}
-
 // Timeout type
-#[derive(
-	Encode, Decode, PartialEq, Eq, Ord, PartialOrd, MaxEncodedLen, scale_info::TypeInfo, Clone,
-)]
+#[derive(Encode, Decode, PartialEq, Eq, scale_info::TypeInfo, Clone)]
 #[cfg_attr(feature = "std", derive(Debug))]
 pub enum TimeoutType {
 	Penalty, // Penalty timeout type
@@ -175,9 +163,7 @@ pub enum TimeoutType {
 }
 
 // Fee type
-#[derive(
-	Encode, Decode, PartialEq, Eq, Ord, PartialOrd, MaxEncodedLen, scale_info::TypeInfo, Clone,
-)]
+#[derive(Encode, Decode, PartialEq, Eq, scale_info::TypeInfo, Clone)]
 #[cfg_attr(feature = "std", derive(Debug))]
 pub enum FeeType {
 	TraderAccountFee,           // Trader acccount registration fee
@@ -381,11 +367,19 @@ pub mod pallet {
 		OptionQuery,
 	>;
 
-	// Penalty timeouts
+	// Penalty timeouts (for AccountID's)
 	#[pallet::storage]
-	#[pallet::getter(fn penalty_timeouts)]
-	pub(super) type PenaltyTimeouts<T: Config> =
-		StorageMap<_, Identity, BlockNumber<T>, BTreeSet<PenaltyType<AccountIdOf<T>>>, OptionQuery>;
+	#[pallet::getter(fn penalty_timeouts_accounts)]
+	pub(super) type PenaltyTimeoutsAccounts<T: Config> =
+		StorageMap<_, Identity, BlockNumber<T>, BTreeSet<AccountIdOf<T>>, OptionQuery>;
+
+
+	
+	// Penalty timeouts (for hashes)
+	#[pallet::storage]
+	#[pallet::getter(fn penalty_timeouts_hashes)]
+	pub(super) type PenaltyTimeoutsHashes<T: Config> =
+		StorageMap<_, Identity, BlockNumber<T>, BTreeSet<H256>, OptionQuery>;
 
 	// Voting timeouts
 	#[pallet::storage]
