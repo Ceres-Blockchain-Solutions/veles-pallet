@@ -373,8 +373,6 @@ pub mod pallet {
 	pub(super) type PenaltyTimeoutsAccounts<T: Config> =
 		StorageMap<_, Identity, BlockNumber<T>, BTreeSet<AccountIdOf<T>>, OptionQuery>;
 
-
-	
 	// Penalty timeouts (for hashes)
 	#[pallet::storage]
 	#[pallet::getter(fn penalty_timeouts_hashes)]
