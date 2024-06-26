@@ -115,6 +115,8 @@ impl pallet_veles::Config for Test {
 	type CarboCreditDecimal = CarboCreditDecimal;
 	type Time = Timestamp;
 	type PenaltyLevelsConfiguration = PenaltyLevelsConfiguration;
+	type UnsignedPriority = ConstU64<100>;
+	type UnsignedLongevity = ConstU64<100>;
 	type Currency = Balances;
 }
 

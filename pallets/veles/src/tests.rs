@@ -532,6 +532,7 @@ fn cast_vote_cfreport_ok() {
 			carbon_deficit: 0,
 			votes_for: BTreeSet::<AccountId>::new(),
 			votes_against: BTreeSet::<AccountId>::new(),
+			voting_active: true,
 		};
 
 		// Go past genesis block so events get deposited
@@ -576,6 +577,7 @@ fn cast_vote_cfreport_vote_already_submitted() {
 			carbon_deficit: 0,
 			votes_for: BTreeSet::<AccountId>::new(),
 			votes_against: BTreeSet::<AccountId>::new(),
+			voting_active: true,
 		};
 
 		// Go past genesis block so events get deposited
@@ -671,6 +673,7 @@ fn cast_vote_pproposal_ok() {
 			project_hash,
 			votes_for: BTreeSet::<AccountId>::new(),
 			votes_against: BTreeSet::<AccountId>::new(),
+			voting_active: true,
 		};
 
 		// Go past genesis block so events get deposited
@@ -723,6 +726,7 @@ fn cast_vote_pproposal_vote_already_submitted() {
 			project_hash,
 			votes_for: BTreeSet::<AccountId>::new(),
 			votes_against: BTreeSet::<AccountId>::new(),
+			voting_active: true,
 		};
 
 		// Go past genesis block so events get deposited
@@ -823,6 +827,7 @@ fn cast_vote_ccbatch_ok() {
 			initial_credit_price: 0,
 			votes_for: BTreeSet::<AccountId>::new(),
 			votes_against: BTreeSet::<AccountId>::new(),
+			voting_active: true,
 		};
 
 		// Go past genesis block so events get deposited
@@ -877,6 +882,7 @@ fn cast_vote_ccbatch_vote_already_submitted() {
 			initial_credit_price: 0,
 			votes_for: BTreeSet::<AccountId>::new(),
 			votes_against: BTreeSet::<AccountId>::new(),
+			voting_active: true,
 		};
 
 		// Go past genesis block so events get deposited
@@ -1119,6 +1125,7 @@ fn propose_carbon_credit_batch_unauthorized_project_owner() {
 			project_hash,
 			votes_for: BTreeSet::<AccountId>::new(),
 			votes_against: BTreeSet::<AccountId>::new(),
+			voting_active: true,
 		};
 
 		// Insert project proposal info
@@ -1188,6 +1195,7 @@ fn propose_carbon_credit_batch_ok() {
 			project_hash,
 			votes_for: BTreeSet::<AccountId>::new(),
 			votes_against: BTreeSet::<AccountId>::new(),
+			voting_active: true,
 		};
 
 		// Insert project proposal info
@@ -1275,6 +1283,7 @@ fn propose_carbon_credit_batch_documentation_was_used_previously() {
 			project_hash,
 			votes_for: BTreeSet::<AccountId>::new(),
 			votes_against: BTreeSet::<AccountId>::new(),
+			voting_active: true,
 		};
 
 		// Insert project proposal info
