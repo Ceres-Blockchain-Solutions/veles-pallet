@@ -191,6 +191,7 @@ pub mod pallet {
 	use frame_support::pallet_prelude::*;
 	use frame_support::traits::ReservableCurrency;
 	use frame_support::traits::Time;
+	use frame_system::offchain::{SendTransactionTypes, SubmitTransaction};
 	use frame_system::pallet_prelude::*;
 	use sp_std::collections::btree_set::BTreeSet;
 
@@ -209,6 +210,8 @@ pub mod pallet {
 
 		#[pallet::constant]
 		type PenaltyLevelsConfiguration: Get<[PenaltyLevelConfig; 5]>;
+		type UnsignedPriority: Get<TransactionPriority>;
+		type UnsignedLongevity: Get<u64>;
 	}
 
 	/// Pallet types and constants
@@ -863,6 +866,22 @@ pub mod pallet {
 
 			Ok(().into())
 		}
+	}
+
+	#[pallet::validate_unsigned]
+	impl<T: Config> ValidateUnsigned for Pallet<T> {
+		type Call = Call<T>;
+
+		fn validate_unsigned(_source: TransactionSource, call: &Self::Call) -> TransactionValidity {
+			match call {
+				_ => InvalidTransaction::Call.into(),
+			}
+		}
+	}
+
+	#[pallet::hooks]
+	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+		fn offchain_worker(_now: BlockNumber<T>) {}
 	}
 
 	impl<T: Config> Pallet<T> {
