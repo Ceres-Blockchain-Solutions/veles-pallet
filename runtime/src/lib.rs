@@ -10,7 +10,9 @@ use sp_core::{crypto::KeyTypeId, OpaqueMetadata};
 use sp_runtime::{
 	create_runtime_str, generic, impl_opaque_keys,
 	traits::{BlakeTwo256, Block as BlockT, IdentifyAccount, NumberFor, One, Verify},
-	transaction_validity::{TransactionSource, TransactionValidity},
+	transaction_validity::{
+		TransactionLongevity, TransactionPriority, TransactionSource, TransactionValidity,
+	},
 	ApplyExtrinsicResult, MultiSignature,
 };
 use sp_std::prelude::*;
@@ -250,6 +252,9 @@ impl pallet_sudo::Config for Runtime {
 parameter_types! {
 	pub const IPFSLength: u32 = 64;
 	pub const CarboCreditDecimal: u8 = 4;
+	pub OffchainWorkerTxPriority: TransactionPriority =
+		Perbill::from_percent(10) * TransactionPriority::max_value();
+	pub OffchainWorkerTxLongevity: TransactionLongevity = 5;
 	pub const PenaltyLevelsConfiguration: [PenaltyLevelConfig; 5] = [
 		PenaltyLevelConfig { level: 0, base: 1 },
 		PenaltyLevelConfig { level: 1, base: 2 },
@@ -265,6 +270,8 @@ impl pallet_veles::Config for Runtime {
 	type IPFSLength = IPFSLength;
 	type CarboCreditDecimal = CarboCreditDecimal;
 	type Time = Timestamp;
+	type UnsignedPriority = OffchainWorkerTxPriority;
+	type UnsignedLongevity = OffchainWorkerTxLongevity;
 	type PenaltyLevelsConfiguration = PenaltyLevelsConfiguration;
 	type Currency = Balances;
 }
