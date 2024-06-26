@@ -253,6 +253,15 @@ pub mod pallet {
 		fee
 	}
 
+	// Default pallet base time (in blocks) of pallet 
+	// Note: Used to see if proposals can be submitted
+	#[pallet::type_value]
+	pub fn DefaultForPalletBaseTime<T: Config>() -> BlockNumber<T> {
+		let current_block = frame_system::Pallet::<T>::block_number();	// Current block number
+
+		current_block
+	}
+
 	// Default penalty timeout time [in blocks]
 	#[pallet::type_value]
 	pub fn DefaultForPenaltyTimeoutTime<T: Config>() -> BlockNumber<T> {
@@ -298,6 +307,12 @@ pub mod pallet {
 	#[pallet::getter(fn project_owner_account_fee)]
 	pub type ProjectOwnerAccountFee<T: Config> =
 		StorageValue<_, BalanceOf<T>, ValueQuery, DefaultForProjectOwnerAccountFee<T>>;
+
+	// Pallet base time
+	#[pallet::storage]
+	#[pallet::getter(fn pallet_base_time)]
+	pub type BasePalletTime<T: Config> =
+		StorageValue<_, BlockNumber<T>, ValueQuery, DefaultForPalletBaseTime<T>>;
 
 	// Penalty timeout time
 	#[pallet::storage]
