@@ -252,6 +252,7 @@ impl pallet_sudo::Config for Runtime {
 parameter_types! {
 	pub const IPFSLength: u32 = 64;
 	pub const CarboCreditDecimal: u8 = 4;
+	pub const NumberOfBlocksYearly: u32 = 5256000;
 	pub OffchainWorkerTxPriority: TransactionPriority =
 		Perbill::from_percent(10) * TransactionPriority::max_value();
 	pub OffchainWorkerTxLongevity: TransactionLongevity = 5;
@@ -269,6 +270,7 @@ impl pallet_veles::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type IPFSLength = IPFSLength;
 	type CarboCreditDecimal = CarboCreditDecimal;
+	type NumberOfBlocksYearly = NumberOfBlocksYearly;
 	type Time = Timestamp;
 	type UnsignedPriority = OffchainWorkerTxPriority;
 	type UnsignedLongevity = OffchainWorkerTxLongevity;
