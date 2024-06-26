@@ -798,6 +798,7 @@ pub mod pallet {
 				project_hash,
 				votes_for: BTreeSet::<AccountIdOf<T>>::new(),
 				votes_against: BTreeSet::<AccountIdOf<T>>::new(),
+				voting_active: true,
 			};
 
 			// Write to info storage
@@ -854,6 +855,7 @@ pub mod pallet {
 				initial_credit_price,
 				votes_for: BTreeSet::<AccountIdOf<T>>::new(),
 				votes_against: BTreeSet::<AccountIdOf<T>>::new(),
+				voting_active: true,
 			};
 
 			// Write to info storage
