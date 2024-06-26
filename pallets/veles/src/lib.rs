@@ -474,6 +474,8 @@ pub mod pallet {
 		InvalidTimeoutValue,
 		/// Documentation (IPFS link) was used previously
 		DocumentationWasUsedPreviously,
+		/// Voting cycle is over
+		VotingCycleIsOver,
 		/// Vote already submitted
 		VoteAlreadySubmitted,
 		/// Project proposal already exists
@@ -699,6 +701,12 @@ pub mod pallet {
 					let mut report =
 						CFReports::<T>::get(ipfs.clone()).ok_or(Error::<T>::CFReportNotFound)?;
 
+					// Check if the voting cycle is over
+					ensure!(
+						report.voting_active,
+						Error::<T>::VotingCycleIsOver
+					);
+
 					// Check if vote already exists
 					ensure!(
 						!report.votes_for.contains(&user) && !report.votes_against.contains(&user),
@@ -717,6 +725,12 @@ pub mod pallet {
 					// Get proposal info or return error if it does not exist
 					let mut proposal = ProjectProposals::<T>::get(ipfs.clone())
 						.ok_or(Error::<T>::ProjectProposalNotFound)?;
+
+					// Check if the voting cycle is over
+					ensure!(
+						proposal.voting_active,
+						Error::<T>::VotingCycleIsOver
+					);
 
 					// Check if vote already exists
 					ensure!(
@@ -737,6 +751,12 @@ pub mod pallet {
 					// Get carbon credit batch proposal info or return error if it does not exist
 					let mut batch = CCBProposals::<T>::get(ipfs.clone())
 						.ok_or(Error::<T>::CCBProposalNotFound)?;
+
+					// Check if the voting cycle is over
+					ensure!(
+						batch.voting_active,
+						Error::<T>::VotingCycleIsOver
+					);
 
 					// Check if vote already exists
 					ensure!(
