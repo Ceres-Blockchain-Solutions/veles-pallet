@@ -28,6 +28,35 @@ fn update_base_pallet_time_zero_ok() {
 }
 
 #[test]
+fn update_base_pallet_time_new_year_ok() {
+	new_test_ext().execute_with(|| {
+		// Check for base pallet time before block 1
+		let base_pallet_time = BasePalletTime::<Test>::get();
+
+		assert_eq!(base_pallet_time, 0);
+
+		// Go past genesis block so events get deposited
+		run_to_block(1);
+
+		// Check for base pallet time on block 1
+		let base_pallet_time = BasePalletTime::<Test>::get();
+
+		assert_eq!(base_pallet_time, 1);
+
+		// Set number of block yearly
+		NumberOfBlocksYearlyStorage::<Test>::set(100);
+
+		// Go to block 110
+		run_to_block(110);
+
+		// Check for base pallet time on block 10
+		let base_pallet_time = BasePalletTime::<Test>::get();
+
+		assert_eq!(base_pallet_time, 101);
+	});
+}
+
+#[test]
 fn change_timeout_time_unauthorized() {
 	new_test_ext().execute_with(|| {
 		// Go past genesis block so events get deposited
@@ -213,7 +242,7 @@ fn change_fee_amount_ok_project_owner_account_fee_fee() {
 }
 
 #[test]
-fn register_for_trader_account_trader_already_existst() {
+fn register_for_trader_account_account_id_already_in_use() {
 	new_test_ext().execute_with(|| {
 		// Go past genesis block so events get deposited
 		run_to_block(1);
@@ -223,10 +252,10 @@ fn register_for_trader_account_trader_already_existst() {
 		new_traders.insert(alice());
 		TraderAccounts::<Test>::set(new_traders);
 
-		// Check for TraderAlreadyExists error
+		// Check for AccountIdAlreadyInUse error
 		assert_err!(
 			Veles::register_for_trader_account(RuntimeOrigin::signed(alice()),),
-			Error::<Test>::TraderAlreadyExists
+			Error::<Test>::AccountIdAlreadyInUse
 		);
 	});
 }
@@ -257,7 +286,7 @@ fn register_for_trader_account_ok() {
 }
 
 #[test]
-fn register_for_project_validator_account_already_existst() {
+fn register_for_project_validator_account_id_already_in_use() {
 	new_test_ext().execute_with(|| {
 		// Create documentation IPFS
 		let documentation_ipfs =
@@ -282,7 +311,7 @@ fn register_for_project_validator_account_already_existst() {
 				RuntimeOrigin::signed(alice()),
 				documentation_ipfs
 			),
-			Error::<Test>::ProjectValidatorAlreadyExists
+			Error::<Test>::AccountIdAlreadyInUse
 		);
 	});
 }
@@ -379,7 +408,7 @@ fn register_for_project_validator_account_ok() {
 }
 
 #[test]
-fn register_for_project_owner_account_already_existst() {
+fn register_for_project_owner_account_account_id_already_in_use() {
 	new_test_ext().execute_with(|| {
 		// Create documentation IPFS
 		let documentation_ipfs =
@@ -398,13 +427,13 @@ fn register_for_project_owner_account_already_existst() {
 		// Insert project owner
 		ProjectOwners::<Test>::insert(alice(), powner_info);
 
-		// Check for ProjectOwnerAlreadyExists error
+		// Check for AccountIdAlreadyInUse error
 		assert_err!(
 			Veles::register_for_project_owner_account(
 				RuntimeOrigin::signed(alice()),
 				documentation_ipfs
 			),
-			Error::<Test>::ProjectOwnerAlreadyExists
+			Error::<Test>::AccountIdAlreadyInUse
 		);
 	});
 }
@@ -555,7 +584,7 @@ fn cast_vote_cfreport_ok() {
 		let cfreport_info = CFReportInfo {
 			cf_account: bob(),
 			creation_date: 0,
-			carbon_deficit: 0,
+			carbon_balance: 0,
 			votes_for: BTreeSet::<AccountId>::new(),
 			votes_against: BTreeSet::<AccountId>::new(),
 			voting_active: true,
@@ -600,7 +629,7 @@ fn cast_vote_cfreport_voting_cycle_is_over_submitted() {
 		let cfreport_info = CFReportInfo {
 			cf_account: bob(),
 			creation_date: 0,
-			carbon_deficit: 0,
+			carbon_balance: 0,
 			votes_for: BTreeSet::<AccountId>::new(),
 			votes_against: BTreeSet::<AccountId>::new(),
 			voting_active: false,
@@ -648,7 +677,7 @@ fn cast_vote_cfreport_vote_already_submitted() {
 		let cfreport_info = CFReportInfo {
 			cf_account: bob(),
 			creation_date: 0,
-			carbon_deficit: 0,
+			carbon_balance: 0,
 			votes_for: BTreeSet::<AccountId>::new(),
 			votes_against: BTreeSet::<AccountId>::new(),
 			voting_active: true,

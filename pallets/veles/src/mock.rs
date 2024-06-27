@@ -103,7 +103,7 @@ impl pallet_balances::Config for Test {
 parameter_types! {
 	pub const IPFSLength: u32 = 64;
 	pub const CarboCreditDecimal: u8 = 4;
-	pub const NumberOfBlocksYearly: u32 = 5256000;
+	pub const BlockFinalizationTime: u32 = 6;
 	pub const PenaltyLevelsConfiguration: [PenaltyLevelConfig; 5] = [
 		PenaltyLevelConfig { level: 0, base: 1 },
 		PenaltyLevelConfig { level: 1, base: 2 },
@@ -130,7 +130,7 @@ impl pallet_veles::Config for Test {
 	type PenaltyLevelsConfiguration = PenaltyLevelsConfiguration;
 	type UnsignedPriority = ConstU64<100>;
 	type UnsignedLongevity = ConstU64<100>;
-	type NumberOfBlocksYearly = NumberOfBlocksYearly;
+	type BlockFinalizationTime = BlockFinalizationTime;
 	type Currency = Balances;
 }
 

@@ -35,8 +35,8 @@ pub struct PVoPOInfo<IPFSLength: Get<u32>, BlockNumber> {
 #[cfg_attr(feature = "std", derive(Debug))]
 #[scale_info(skip_type_params(IPFSLength))]
 pub struct CFAccountInfo<MomentOf, IPFSLength: Get<u32>> {
-	// IPFS link to CFA documentation
-	documentation_ipfs: BoundedString<IPFSLength>,
+	// IPFS links to CFA documentation
+	documentation_ipfses: BTreeSet<BoundedString<IPFSLength>>,
 	// Carbon credit balance
 	carbon_credit_balance: i128,
 	// Creation date
@@ -51,8 +51,8 @@ pub struct CFReportInfo<AccountIdOf, MomentOf> {
 	cf_account: AccountIdOf,
 	// Creation date
 	creation_date: MomentOf,
-	// Carbon deficit (aka Carbon footprint)
-	carbon_deficit: i128,
+	// Carbon balance (aka Carbon footprint)
+	carbon_balance: i128,
 	// Votes for
 	votes_for: BTreeSet<AccountIdOf>,
 	// Votes against
@@ -197,7 +197,7 @@ pub mod pallet {
 	pub trait Config: frame_system::Config + SendTransactionTypes<Call<Self>> {
 		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 		type IPFSLength: Get<u32>;
-		type NumberOfBlocksYearly: Get<u32>;
+		type BlockFinalizationTime: Get<u32>;
 		type CarboCreditDecimal: Get<u8>;
 		type Time: Time;
 		type Currency: ReservableCurrency<Self::AccountId>;
@@ -231,6 +231,14 @@ pub mod pallet {
 		set
 	}
 
+	// Default carbon footpring account fee
+	#[pallet::type_value]
+	pub fn DefaultForCFAccountFee<T: Config>() -> BalanceOf<T> {
+		let fee = BalanceOf::<T>::from(300u32);
+
+		fee
+	}
+
 	// Default trader account fee
 	#[pallet::type_value]
 	pub fn DefaultForTraderAccountFee<T: Config>() -> BalanceOf<T> {
@@ -258,17 +266,27 @@ pub mod pallet {
 	// Default pallet base time (in blocks) of pallet
 	// Note: Used to see if proposals can be submitted
 	#[pallet::type_value]
-	pub fn DefaultForPalletBaseTime<T: Config>() -> BlockNumber<T> {
+	pub fn DefaultForBasePalletTime<T: Config>() -> BlockNumber<T> {
 		let current_block = 0u32; // Current block number
 
-		current_block.into()
+		BlockNumber::<T>::from(current_block)
+	}
+
+	// Default for number of blocks yearly
+	// Note: Used to see if a year was passed
+	#[pallet::type_value]
+	pub fn DefaultForNumberOfBlocksYearly<T: Config>() -> BlockNumber<T> {
+		let seconds_in_year: u32 = 365 * 24 * 60 * 60;
+		let block_finalization_time: u32 = T::BlockFinalizationTime::get().into();
+
+		BlockNumber::<T>::from(seconds_in_year / block_finalization_time)
 	}
 
 	// Default penalty timeout time [in blocks]
 	#[pallet::type_value]
 	pub fn DefaultForPenaltyTimeoutTime<T: Config>() -> BlockNumber<T> {
 		let timeout_time: u32 = 31 * 24 * 60 * 60; // A MONTH in seconds
-		let block_finalization_time: u32 = 8; // Predefined block finalization time
+		let block_finalization_time: u32 = T::BlockFinalizationTime::get().into();
 
 		BlockNumber::<T>::from(timeout_time / block_finalization_time)
 	}
@@ -277,7 +295,7 @@ pub mod pallet {
 	#[pallet::type_value]
 	pub fn DefaultForVotingTimeoutTime<T: Config>() -> BlockNumber<T> {
 		let timeout_time: u32 = 7 * 24 * 60 * 60; // A WEEK in seconds
-		let block_finalization_time: u32 = 8; // Predefined block finalization time
+		let block_finalization_time: u32 = T::BlockFinalizationTime::get().into();
 
 		BlockNumber::<T>::from(timeout_time / block_finalization_time)
 	}
@@ -286,12 +304,18 @@ pub mod pallet {
 	#[pallet::type_value]
 	pub fn DefaultForSalesTimeoutTime<T: Config>() -> BlockNumber<T> {
 		let timeout_time: u32 = 7 * 24 * 60 * 60; // A WEEK in seconds
-		let block_finalization_time: u32 = 8; // Predefined block finalization time
+		let block_finalization_time: u32 = T::BlockFinalizationTime::get().into();
 
 		BlockNumber::<T>::from(timeout_time / block_finalization_time)
 	}
 
 	/// Pallet storages
+	// CF account fee
+	#[pallet::storage]
+	#[pallet::getter(fn cf_account_fee)]
+	pub type CFAccountFee<T: Config> =
+		StorageValue<_, BalanceOf<T>, ValueQuery, DefaultForCFAccountFee<T>>;
+
 	// Trader account fee
 	#[pallet::storage]
 	#[pallet::getter(fn trader_account_fee)]
@@ -314,7 +338,13 @@ pub mod pallet {
 	#[pallet::storage]
 	#[pallet::getter(fn pallet_base_time)]
 	pub type BasePalletTime<T: Config> =
-		StorageValue<_, BlockNumber<T>, ValueQuery, DefaultForPalletBaseTime<T>>;
+		StorageValue<_, BlockNumber<T>, ValueQuery, DefaultForBasePalletTime<T>>;
+
+	// Number of blocks yearly
+	#[pallet::storage]
+	#[pallet::getter(fn number_of_blocks_per_year)]
+	pub type NumberOfBlocksYearlyStorage<T: Config> =
+		StorageValue<_, BlockNumber<T>, ValueQuery, DefaultForNumberOfBlocksYearly<T>>;
 
 	// Penalty timeout time
 	#[pallet::storage]
@@ -467,6 +497,8 @@ pub mod pallet {
 		ProjectOwnerAccountRegistered(AccountIdOf<T>, BoundedString<T::IPFSLength>),
 		/// Successful Vote Cast
 		SuccessfulVote(AccountIdOf<T>, BoundedString<T::IPFSLength>, VoteType, bool),
+		/// Carbon Footprint Report Submitted
+		CarbonFootprintReportSubmitted(AccountIdOf<T>, BoundedString<T::IPFSLength>),
 		/// Successful Project Proposal Created
 		ProjectProposalCreated(AccountIdOf<T>, BoundedString<T::IPFSLength>),
 		/// Carbon Credit Batch Proposal Created
@@ -475,12 +507,6 @@ pub mod pallet {
 
 	#[pallet::error]
 	pub enum Error<T> {
-		/// Trader already exists
-		TraderAlreadyExists,
-		/// Project validator already exists
-		ProjectValidatorAlreadyExists,
-		/// Project validator already exists
-		ProjectOwnerAlreadyExists,
 		/// Insufficient funds
 		InsufficientFunds,
 		/// Report not found
@@ -505,6 +531,12 @@ pub mod pallet {
 		WrongVoteType,
 		/// Project doesn't exist
 		ProjectDoesntExist,
+		/// Account ID already in use
+		AccountIdAlreadyInUse,
+		/// Already submitted a CF report
+		CFReportAlreadySubmitted,
+		/// User is active in CF report voting cycle
+		UserIsActiveInCFReportVotingCycle,
 	}
 
 	#[pallet::call]
@@ -587,10 +619,13 @@ pub mod pallet {
 		pub fn register_for_trader_account(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
 			let user = ensure_signed(origin)?;
 
-			// Check if caller is already has a associated trader account
+			// Check if the account is in use
+			ensure!(Self::is_account_id_available(user.clone()), Error::<T>::AccountIdAlreadyInUse);
+
+			// Check if the user is active in a CF report voting cycle
 			ensure!(
-				!TraderAccounts::<T>::get().contains(&user.clone()),
-				Error::<T>::TraderAlreadyExists
+				!Self::is_trying_to_register_as_cfa(user.clone()),
+				Error::<T>::UserIsActiveInCFReportVotingCycle
 			);
 
 			// Check if caller has sufficient funds
@@ -619,10 +654,13 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			let user = ensure_signed(origin)?;
 
-			// Check if caller is already has a associated project validator account
+			// Check if the account is in use
+			ensure!(Self::is_account_id_available(user.clone()), Error::<T>::AccountIdAlreadyInUse);
+
+			// Check if the user is active in a CF report voting cycle
 			ensure!(
-				!ProjectValidators::<T>::contains_key(&user.clone()),
-				Error::<T>::ProjectValidatorAlreadyExists
+				!Self::is_trying_to_register_as_cfa(user.clone()),
+				Error::<T>::UserIsActiveInCFReportVotingCycle
 			);
 
 			// Check if the documentation (IPFS link) has been used previously
@@ -663,10 +701,13 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			let user = ensure_signed(origin)?;
 
-			// Check if caller is already has a associated project owner account
+			// Check if the account is in use
+			ensure!(Self::is_account_id_available(user.clone()), Error::<T>::AccountIdAlreadyInUse);
+
+			// Check if the user is active in a CF report voting cycle
 			ensure!(
-				!ProjectOwners::<T>::contains_key(&user.clone()),
-				Error::<T>::ProjectOwnerAlreadyExists
+				!Self::is_trying_to_register_as_cfa(user.clone()),
+				Error::<T>::UserIsActiveInCFReportVotingCycle
 			);
 
 			// Check if the documentation (IPFS link) has been used previously
@@ -694,6 +735,75 @@ pub mod pallet {
 				user.clone(),
 				documentation_ipfs.clone(),
 			));
+
+			Ok(().into())
+		}
+
+		// Submit carbon footprint report
+		#[pallet::call_index(6)]
+		#[pallet::weight(0)]
+		pub fn submit_cfreport(
+			origin: OriginFor<T>,
+			ipfs: BoundedString<T::IPFSLength>,
+			carbon_balance: i128,
+		) -> DispatchResultWithPostInfo {
+			let user = ensure_signed(origin)?;
+
+			// Check if the account is a CFAccount
+			// Note: An accountID value can be already in use for as a CF account
+			// 		 But it can also be available if the user is a new user of the pallet
+			ensure!(Self::is_eligible_for_cfa(user.clone()), Error::<T>::AccountIdAlreadyInUse);
+
+			// Check if the documentation (IPFS link) has been used previously
+			ensure!(
+				Self::is_ipfs_available(ipfs.clone()),
+				Error::<T>::DocumentationWasUsedPreviously
+			);
+
+			// Check if the user has already submited a CF report
+			ensure!(
+				!Self::is_trying_to_register_as_cfa(user.clone()),
+				Error::<T>::CFReportAlreadySubmitted
+			);
+
+			// Check if caller has sufficient funds
+			ensure!(
+				CFAccountFee::<T>::get() <= T::Currency::free_balance(&user.clone()),
+				Error::<T>::InsufficientFunds
+			);
+
+			// Get time
+			let creation_date = T::Time::now();
+
+			// Carbon footprint info
+			let cf_report_info = CFReportInfo {
+				cf_account: user.clone(),
+				creation_date,
+				carbon_balance,
+				votes_for: BTreeSet::<AccountIdOf<T>>::new(),
+				votes_against: BTreeSet::<AccountIdOf<T>>::new(),
+				voting_active: true,
+			};
+
+			// Write to info storage
+			CFReports::<T>::insert(ipfs.clone(), cf_report_info);
+
+			// Set for voting timeout
+			let current_block = frame_system::Pallet::<T>::block_number(); // Get current block number
+			let timeout_block = current_block + VotingTimeoutTime::<T>::get(); // Calculate voting timeout time
+
+			let mut timeout_events = BTreeSet::<BoundedString<T::IPFSLength>>::new();
+
+			if VotingTimeouts::<T>::contains_key(timeout_block) {
+				timeout_events = VotingTimeouts::<T>::get(timeout_block).unwrap();
+			}
+
+			timeout_events.insert(ipfs.clone());
+
+			VotingTimeouts::<T>::insert(timeout_block, timeout_events);
+
+			// Deposit event
+			Self::deposit_event(Event::CarbonFootprintReportSubmitted(user.clone(), ipfs));
 
 			Ok(().into())
 		}
@@ -788,7 +898,7 @@ pub mod pallet {
 		}
 
 		// Propose project
-		#[pallet::call_index(6)]
+		#[pallet::call_index(7)]
 		#[pallet::weight(0)]
 		pub fn propose_project(
 			origin: OriginFor<T>,
@@ -832,6 +942,20 @@ pub mod pallet {
 			// Write to info storage
 			ProjectProposals::<T>::insert(ipfs.clone(), project_proposal_info);
 
+			// Set for voting timeout
+			let current_block = frame_system::Pallet::<T>::block_number(); // Get current block number
+			let timeout_block = current_block + VotingTimeoutTime::<T>::get(); // Calculate voting timeout time
+
+			let mut timeout_events = BTreeSet::<BoundedString<T::IPFSLength>>::new();
+
+			if VotingTimeouts::<T>::contains_key(timeout_block) {
+				timeout_events = VotingTimeouts::<T>::get(timeout_block).unwrap();
+			}
+
+			timeout_events.insert(ipfs.clone());
+
+			VotingTimeouts::<T>::insert(timeout_block, timeout_events);
+
 			// Deposit event
 			Self::deposit_event(Event::ProjectProposalCreated(user.clone(), ipfs));
 
@@ -839,7 +963,7 @@ pub mod pallet {
 		}
 
 		// Propose carbon credit batch
-		#[pallet::call_index(7)]
+		#[pallet::call_index(8)]
 		#[pallet::weight(0)]
 		pub fn propose_carbon_credit_batch(
 			origin: OriginFor<T>,
@@ -888,6 +1012,20 @@ pub mod pallet {
 
 			// Write to info storage
 			CCBProposals::<T>::insert(ipfs.clone(), ccb_proposal_info);
+
+			// Set for voting timeout
+			let current_block = frame_system::Pallet::<T>::block_number(); // Get current block number
+			let timeout_block = current_block + VotingTimeoutTime::<T>::get(); // Calculate voting timeout time
+
+			let mut timeout_events = BTreeSet::<BoundedString<T::IPFSLength>>::new();
+
+			if VotingTimeouts::<T>::contains_key(timeout_block) {
+				timeout_events = VotingTimeouts::<T>::get(timeout_block).unwrap();
+			}
+
+			timeout_events.insert(ipfs.clone());
+
+			VotingTimeouts::<T>::insert(timeout_block, timeout_events);
 
 			// Deposit event
 			Self::deposit_event(Event::CarbonCreditBatchProposalCreated(user.clone(), ipfs));
@@ -961,21 +1099,23 @@ pub mod pallet {
 
 			// Check in CF accounts
 			for (_, cfa_info) in <CarbonFootprintAccounts<T>>::iter() {
-				if cfa_info.documentation_ipfs == ipfs {
+				let documentation = cfa_info.documentation_ipfses;
+
+				if documentation.contains(&ipfs) {
 					return false;
 				}
 			}
 
 			// Check in validators
-			for (_, cfa_info) in <ProjectValidators<T>>::iter() {
-				if cfa_info.documentation_ipfs == ipfs {
+			for (_, validator) in <ProjectValidators<T>>::iter() {
+				if validator.documentation_ipfs == ipfs {
 					return false;
 				}
 			}
 
 			// Check in project owners
-			for (_, cfa_info) in <ProjectOwners<T>>::iter() {
-				if cfa_info.documentation_ipfs == ipfs {
+			for (_, project_owner) in <ProjectOwners<T>>::iter() {
+				if project_owner.documentation_ipfs == ipfs {
 					return false;
 				}
 			}
@@ -999,6 +1139,35 @@ pub mod pallet {
 			return true;
 		}
 
+		// Check if the account is eligible to be a carbon footpring account
+		// Return true if the account_id isn't in use for another account type
+		// Return false if the account_id is in use for another account type
+		pub fn is_eligible_for_cfa(account_id: AccountIdOf<T>) -> bool {
+			// Check in carbon footprint, trader, project validator and project owner accounts
+			if TraderAccounts::<T>::get().contains(&account_id.clone())
+				|| ProjectValidators::<T>::contains_key(account_id.clone())
+				|| ProjectOwners::<T>::contains_key(account_id.clone())
+			{
+				return false;
+			}
+
+			return true;
+		}
+
+		// Check if the account has submitted a carbon footprint report for voting
+		// Note: If a user has submitted a CF report he/she then can not registed as another account type
+		pub fn is_trying_to_register_as_cfa(account_id: AccountIdOf<T>) -> bool {
+			// Check in CF accounts
+			for (_, cf_report) in <CFReports<T>>::iter() {
+				// Check if user has an active CF report that is up for voting
+				if cf_report.cf_account == account_id && cf_report.voting_active {
+					return true;
+				}
+			}
+
+			return false;
+		}
+
 		// Check if a year has passed and update pallet base time if it has
 		// Note: The base pallet time will update once a year has passed (in blocks)
 		pub fn update_base_pallet_time(now: BlockNumber<T>) -> Weight {
@@ -1006,7 +1175,9 @@ pub mod pallet {
 
 			let base_pallet_time = BasePalletTime::<T>::get();
 
-			if base_pallet_time == 0u32.into() || now > base_pallet_time + T::NumberOfBlocksYearly::get().into() {
+			if base_pallet_time == 0u32.into()
+				|| now == base_pallet_time + NumberOfBlocksYearlyStorage::<T>::get()
+			{
 				BasePalletTime::<T>::set(now);
 
 				counter += 1;
