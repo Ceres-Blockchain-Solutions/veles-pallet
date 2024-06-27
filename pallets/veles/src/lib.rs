@@ -185,6 +185,7 @@ pub mod pallet {
 	use frame_support::traits::Time;
 	use frame_system::offchain::{SendTransactionTypes, SubmitTransaction};
 	use frame_system::pallet_prelude::*;
+	use log::{info, warn};
 	use sp_std::collections::btree_set::BTreeSet;
 
 	#[pallet::pallet]
@@ -193,7 +194,7 @@ pub mod pallet {
 
 	/// Pallet configuration
 	#[pallet::config]
-	pub trait Config: frame_system::Config {
+	pub trait Config: frame_system::Config + SendTransactionTypes<Call<Self>> {
 		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 		type IPFSLength: Get<u32>;
 		type NumberOfBlocksYearly: Get<u32>;
@@ -254,13 +255,13 @@ pub mod pallet {
 		fee
 	}
 
-	// Default pallet base time (in blocks) of pallet 
+	// Default pallet base time (in blocks) of pallet
 	// Note: Used to see if proposals can be submitted
 	#[pallet::type_value]
 	pub fn DefaultForPalletBaseTime<T: Config>() -> BlockNumber<T> {
-		let current_block = frame_system::Pallet::<T>::block_number();	// Current block number
+		let current_block = 0u32; // Current block number
 
-		current_block
+		current_block.into()
 	}
 
 	// Default penalty timeout time [in blocks]
@@ -718,10 +719,7 @@ pub mod pallet {
 						CFReports::<T>::get(ipfs.clone()).ok_or(Error::<T>::CFReportNotFound)?;
 
 					// Check if the voting cycle is over
-					ensure!(
-						report.voting_active,
-						Error::<T>::VotingCycleIsOver
-					);
+					ensure!(report.voting_active, Error::<T>::VotingCycleIsOver);
 
 					// Check if vote already exists
 					ensure!(
@@ -743,10 +741,7 @@ pub mod pallet {
 						.ok_or(Error::<T>::ProjectProposalNotFound)?;
 
 					// Check if the voting cycle is over
-					ensure!(
-						proposal.voting_active,
-						Error::<T>::VotingCycleIsOver
-					);
+					ensure!(proposal.voting_active, Error::<T>::VotingCycleIsOver);
 
 					// Check if vote already exists
 					ensure!(
@@ -769,10 +764,7 @@ pub mod pallet {
 						.ok_or(Error::<T>::CCBProposalNotFound)?;
 
 					// Check if the voting cycle is over
-					ensure!(
-						batch.voting_active,
-						Error::<T>::VotingCycleIsOver
-					);
+					ensure!(batch.voting_active, Error::<T>::VotingCycleIsOver);
 
 					// Check if vote already exists
 					ensure!(
@@ -910,14 +902,48 @@ pub mod pallet {
 
 		fn validate_unsigned(_source: TransactionSource, call: &Self::Call) -> TransactionValidity {
 			match call {
-				_ => InvalidTransaction::Call.into(),
+				// Call::update_base_pallet_time { new_base_pallet_time } => {
+				// 	ValidTransaction::with_tag_prefix("Veles::update_base_pallet_time")
+				// 		.priority(T::UnsignedPriority::get())
+				// 		.longevity(T::UnsignedLongevity::get())
+				// 		.and_provides([new_base_pallet_time])
+				// 		.propagate(true)
+				// 		.build()
+				// },
+				_ => {
+					warn!("Unknown unsigned call {:?}", call);
+					InvalidTransaction::Call.into()
+				},
 			}
 		}
 	}
 
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
-		fn offchain_worker(_now: BlockNumber<T>) {}
+		fn on_initialize(now: BlockNumber<T>) -> Weight {
+			let consumed_weight = Self::update_base_pallet_time(now);
+
+			consumed_weight
+		}
+
+		// fn offchain_worker(now: BlockNumber<T>) {
+
+		// 	let base_pallet_time = BasePalletTime::<T>::get();
+
+		// 	// Check if a year has passed and update pallet base time if it has
+		// 	// Note: The base pallet time will update once a year has passed (in blocks)
+		// 	if base_pallet_time == 0u32.into() || now > base_pallet_time + T::NumberOfBlocksYearly::get().into() {
+		// 		info!("👷 Offchain worker: Running base pallet time check");
+
+		// 		let call = Call::<T>::update_base_pallet_time { new_base_pallet_time: now.clone() };
+
+		// 		if let Err(err) = SubmitTransaction::<T, Call<T>>::submit_unsigned_transaction(call.into()) {
+		// 			warn!("👷 Offchain worker: Failed to liquidate user position.🚧 Error: {:?}", err);
+		// 		} else {
+		// 			info!("👷 Offchain worker: Updated base pallet time");
+		// 		}
+		// 	}
+		// }
 	}
 
 	impl<T: Config> Pallet<T> {
@@ -971,6 +997,24 @@ pub mod pallet {
 			}
 
 			return true;
+		}
+
+		// Check if a year has passed and update pallet base time if it has
+		// Note: The base pallet time will update once a year has passed (in blocks)
+		pub fn update_base_pallet_time(now: BlockNumber<T>) -> Weight {
+			let mut counter: u64 = 0;
+
+			let base_pallet_time = BasePalletTime::<T>::get();
+
+			if base_pallet_time == 0u32.into() || now > base_pallet_time + T::NumberOfBlocksYearly::get().into() {
+				BasePalletTime::<T>::set(now);
+
+				counter += 1;
+			}
+
+			T::DbWeight::get()
+				.reads(counter)
+				.saturating_add(T::DbWeight::get().writes(counter))
 		}
 	}
 }
