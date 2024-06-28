@@ -1,9 +1,11 @@
 use crate as pallet_veles;
 use frame_support::{
 	derive_impl, parameter_types,
-	traits::{ConstU16, ConstU64},
+	traits::{ConstU16, ConstU64, Hooks},
 };
+use frame_system::{self, offchain::SendTransactionTypes};
 use sp_runtime::{
+	testing::TestXt,
 	traits::{BlakeTwo256, IdentityLookup},
 	AccountId32, BuildStorage,
 };
@@ -40,6 +42,16 @@ frame_support::construct_runtime!(
 		Balances: pallet_balances,
 	}
 );
+
+pub type MockExtrinsic = TestXt<RuntimeCall, ()>;
+
+impl<LocalCall> SendTransactionTypes<LocalCall> for Test
+where
+	RuntimeCall: From<LocalCall>,
+{
+	type Extrinsic = MockExtrinsic;
+	type OverarchingCall = RuntimeCall;
+}
 
 #[derive_impl(frame_system::config_preludes::TestDefaultConfig as frame_system::DefaultConfig)]
 impl frame_system::Config for Test {
@@ -91,6 +103,7 @@ impl pallet_balances::Config for Test {
 parameter_types! {
 	pub const IPFSLength: u32 = 64;
 	pub const CarboCreditDecimal: u8 = 4;
+	pub const BlockFinalizationTime: u32 = 6;
 	pub const PenaltyLevelsConfiguration: [PenaltyLevelConfig; 5] = [
 		PenaltyLevelConfig { level: 0, base: 1 },
 		PenaltyLevelConfig { level: 1, base: 2 },
@@ -115,6 +128,9 @@ impl pallet_veles::Config for Test {
 	type CarboCreditDecimal = CarboCreditDecimal;
 	type Time = Timestamp;
 	type PenaltyLevelsConfiguration = PenaltyLevelsConfiguration;
+	type UnsignedPriority = ConstU64<100>;
+	type UnsignedLongevity = ConstU64<100>;
+	type BlockFinalizationTime = BlockFinalizationTime;
 	type Currency = Balances;
 }
 
@@ -131,4 +147,13 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
 	.unwrap();
 
 	storage.into()
+}
+
+pub fn run_to_block(n: u64) {
+	while System::block_number() < n {
+		System::on_finalize(System::block_number());
+		System::set_block_number(System::block_number() + 1);
+		System::on_initialize(System::block_number());
+		Veles::on_initialize(System::block_number());
+	}
 }
