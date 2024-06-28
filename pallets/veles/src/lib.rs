@@ -3,16 +3,16 @@
 pub use codec::{Decode, Encode, MaxEncodedLen};
 pub use common::BoundedString;
 pub use frame_support::pallet_prelude::Get;
+pub use frame_support::sp_runtime::traits::AccountIdConversion;
 pub use frame_support::traits::Currency;
+pub use frame_support::traits::ExistenceRequirement;
 pub use pallet::*;
 pub use sp_core::{blake2_256, H256};
 pub use sp_std::collections::btree_set::BTreeSet;
 
-// This module contains a mock runtime specific for testing this pallet's functionality.
 #[cfg(test)]
 mod mock;
 
-// This module contains the unit tests for this pallet.
 #[cfg(test)]
 mod tests;
 
@@ -21,7 +21,7 @@ mod tests;
 #[derive(Encode, Decode, Default, PartialEq, Eq, scale_info::TypeInfo)]
 #[cfg_attr(feature = "std", derive(Debug))]
 #[scale_info(skip_type_params(IPFSLength))]
-pub struct PVoPOInfo<IPFSLength: Get<u32>, BlockNumber> {
+pub struct ProjectValidatorOrProjectOwnerInfo<IPFSLength: Get<u32>, BlockNumber> {
 	// IPFS link to PV/PO documentation
 	documentation_ipfs: BoundedString<IPFSLength>,
 	// Penalty level
@@ -34,7 +34,7 @@ pub struct PVoPOInfo<IPFSLength: Get<u32>, BlockNumber> {
 #[derive(Encode, Decode, Default, PartialEq, Eq, scale_info::TypeInfo)]
 #[cfg_attr(feature = "std", derive(Debug))]
 #[scale_info(skip_type_params(IPFSLength))]
-pub struct CFAccountInfo<MomentOf, IPFSLength: Get<u32>> {
+pub struct CarbonFootprintAccountInfo<MomentOf, IPFSLength: Get<u32>> {
 	// IPFS links to CFA documentation
 	documentation_ipfses: BTreeSet<BoundedString<IPFSLength>>,
 	// Carbon credit balance
@@ -46,7 +46,7 @@ pub struct CFAccountInfo<MomentOf, IPFSLength: Get<u32>> {
 // Carbon Footprint report data structure
 #[derive(Encode, Decode, Default, PartialEq, Eq, scale_info::TypeInfo)]
 #[cfg_attr(feature = "std", derive(Debug))]
-pub struct CFReportInfo<AccountIdOf, MomentOf> {
+pub struct CarbonFootprintReportInfo<AccountIdOf, MomentOf> {
 	// Carbon footprint account
 	cf_account: AccountIdOf,
 	// Creation date
@@ -82,7 +82,7 @@ pub struct ProjectProposalInfo<AccountIdOf, MomentOf> {
 // Carbon Credit Batch Proposal info structure
 #[derive(Encode, Decode, Clone, Default, PartialEq, Eq, scale_info::TypeInfo)]
 #[cfg_attr(feature = "std", derive(Debug))]
-pub struct CCBProposalInfo<MomentOf, BalanceOf, AccountIdOf> {
+pub struct CarbonCreditBatchProposalInfo<MomentOf, BalanceOf, AccountIdOf> {
 	// Project hash
 	project_hash: H256,
 	// Carbon credit batch hash
@@ -120,7 +120,7 @@ pub struct ProjectInfo<IPFSLength: Get<u32>, MomentOf, BlockNumber> {
 #[derive(Encode, Decode, Clone, Default, PartialEq, Eq, scale_info::TypeInfo)]
 #[cfg_attr(feature = "std", derive(Debug))]
 #[scale_info(skip_type_params(IPFSLength))]
-pub struct CCBInfo<IPFSLength: Get<u32>, MomentOf, BalanceOf, VoteType> {
+pub struct CarbonCreditBatchInfo<IPFSLength: Get<u32>, MomentOf, BalanceOf, VoteType> {
 	// IPFS link to CFA documentation
 	documentation_ipfs: BoundedString<IPFSLength>,
 	// Creation date
@@ -137,44 +137,84 @@ pub struct CCBInfo<IPFSLength: Get<u32>, MomentOf, BalanceOf, VoteType> {
 #[derive(Encode, Decode, Default, PartialEq, Eq, scale_info::TypeInfo)]
 #[cfg_attr(feature = "std", derive(Debug))]
 pub struct PenaltyLevelConfig {
-	pub level: u8, // Penalty level
-	pub base: i32, // Balance
+	pub level: u8, 	// Penalty level
+	pub base: i32, 	// Balance
 }
 
 // Vote type enum
 #[derive(Encode, Decode, PartialEq, Eq, scale_info::TypeInfo, Clone)]
 #[cfg_attr(feature = "std", derive(Debug))]
 pub enum VoteType {
-	CFReportVote,
-	PProposalVote,
-	CCBatchVote,
+	CarbonFootprintReportVote,
+	ProjectProposalVote,
+	CarbonCreditBatchVote,
 }
 
 // Carbon credit batch status
 #[derive(Encode, Decode, PartialEq, Eq, scale_info::TypeInfo, Clone)]
 #[cfg_attr(feature = "std", derive(Debug))]
-pub enum CCBStatus {
-	Active,   // Tokens can be traded and retired
-	Frozen,   // Tokens can't be traded or retired
-	Redacted, // Tokens have been removed from circulation
+pub enum CarbonCreditBatchStatus {
+	Active,   	// Tokens can be traded and retired
+	Frozen,   	// Tokens can't be traded or retired
+	Redacted, 	// Tokens have been removed from circulation
 }
 
-// Timeout type
-#[derive(Encode, Decode, PartialEq, Eq, scale_info::TypeInfo, Clone)]
-#[cfg_attr(feature = "std", derive(Debug))]
-pub enum TimeoutType {
-	Penalty, // Penalty timeout type
-	Voting,  // Voting timeout type
-	Sales,   // Sales timeout type
-}
-
-// Fee type
+// Fee types
 #[derive(Encode, Decode, PartialEq, Eq, scale_info::TypeInfo, Clone)]
 #[cfg_attr(feature = "std", derive(Debug))]
 pub enum FeeType {
-	TraderAccountFee,           // Trader acccount registration fee
-	ProjectValidatorAccountFee, // Project validator account registration fee
-	ProjectOwnerAccountFee,     // Project owner account registration fee
+	TraderAccountFee,           	// Trader acccount registration fee
+	ProjectValidatorAccountFee, 	// Project validator account registration fee
+	ProjectOwnerAccountFee,     	// Project owner account registration fee
+	CarbonCreditReportFee,      	// Carbon credit report submition fee
+	ProjectProposalFee,         	// Project proposal fee
+	CarbonCreditBatchFee,       	// Carbon credit batch proposition fee
+	VotingFee,                  	// Voting fee
+	ClaimFee,                   	// Claim proposal fee
+}
+
+// Fee values
+#[derive(Encode, Decode, PartialEq, Eq, scale_info::TypeInfo, Clone)]
+#[cfg_attr(feature = "std", derive(Debug))]
+pub struct FeeValues<BalanceOf> {
+	// Trader acccount registration fee
+	trader_account_fee: BalanceOf,
+	// Project validator account registration fee
+	project_validator_account_fee: BalanceOf,
+	// Project owner account registration fee
+	project_owner_account_fee: BalanceOf,
+	// Carbon footprint report submition fee
+	carbon_footprint_report_fee: BalanceOf,
+	// Project proposal fee 
+	project_proposal_fee: BalanceOf, 
+	// Carbon credit batch proposition fee
+	carbon_credit_batch_fee: BalanceOf,
+	// Voting fee
+	voting_fee: BalanceOf,
+	// Claim proposal fee     
+	claim_fee: BalanceOf,          
+}
+
+// Time type
+#[derive(Encode, Decode, PartialEq, Eq, scale_info::TypeInfo, Clone)]
+#[cfg_attr(feature = "std", derive(Debug))]
+pub enum TimeType {
+	NumberOfBlocksYearly,
+	PalletBaseTime,
+	PenaltyTimeout,
+	VotingTimeout,
+	SalesTimeout,
+}
+
+// Time values (in blocks)
+#[derive(Encode, Decode, PartialEq, Eq, scale_info::TypeInfo, Clone)]
+#[cfg_attr(feature = "std", derive(Debug))]
+pub struct TimeValues<BlockNumber> {
+	number_of_blocks_per_year: BlockNumber,
+	pallet_base_time: BlockNumber,
+	penalty_timeout: BlockNumber,
+	voting_timeout: BlockNumber,
+	sales_timeout: BlockNumber,
 }
 
 #[frame_support::pallet]
@@ -183,10 +223,13 @@ pub mod pallet {
 	use frame_support::pallet_prelude::*;
 	use frame_support::traits::ReservableCurrency;
 	use frame_support::traits::Time;
+	use frame_support::PalletId;
 	use frame_system::offchain::{SendTransactionTypes, SubmitTransaction};
 	use frame_system::pallet_prelude::*;
 	use log::{info, warn};
 	use sp_std::collections::btree_set::BTreeSet;
+
+	const PALLET_ID: PalletId = PalletId(*b"velesplt");
 
 	#[pallet::pallet]
 	#[pallet::without_storage_info]
@@ -231,138 +274,59 @@ pub mod pallet {
 		set
 	}
 
-	// Default carbon footpring account fee
+	// Default values for all fees
 	#[pallet::type_value]
-	pub fn DefaultForCFAccountFee<T: Config>() -> BalanceOf<T> {
-		let fee = BalanceOf::<T>::from(300u32);
+	pub fn DefaultForPalletFeeValues<T: Config>() -> FeeValues<BalanceOf<T>> {
+		let fee_values: FeeValues<BalanceOf<T>> = FeeValues {
+			trader_account_fee: BalanceOf::<T>::from(100u32),
+			project_validator_account_fee: BalanceOf::<T>::from(100u32),
+			project_owner_account_fee: BalanceOf::<T>::from(100u32),
+			carbon_footprint_report_fee: BalanceOf::<T>::from(300u32),
+			project_proposal_fee: BalanceOf::<T>::from(100u32),
+			carbon_credit_batch_fee: BalanceOf::<T>::from(50u32),
+			voting_fee: BalanceOf::<T>::from(100u32),
+			claim_fee: BalanceOf::<T>::from(100u32),
+		};
 
-		fee
+		fee_values
 	}
 
-	// Default trader account fee
+	// Default values for all timeouts/block values
 	#[pallet::type_value]
-	pub fn DefaultForTraderAccountFee<T: Config>() -> BalanceOf<T> {
-		let fee = BalanceOf::<T>::from(100u32);
+	pub fn DefaultForPalletTimeValues<T: Config>() -> TimeValues<BlockNumber<T>> {
+		let block_finalization_time: u32 = T::BlockFinalizationTime::get().into();
 
-		fee
-	}
-
-	// Default project validator account fee
-	#[pallet::type_value]
-	pub fn DefaultForProjectValidatorAccountFee<T: Config>() -> BalanceOf<T> {
-		let fee = BalanceOf::<T>::from(100u32);
-
-		fee
-	}
-
-	// Default project owner account fee
-	#[pallet::type_value]
-	pub fn DefaultForProjectOwnerAccountFee<T: Config>() -> BalanceOf<T> {
-		let fee = BalanceOf::<T>::from(100u32);
-
-		fee
-	}
-
-	// Default pallet base time (in blocks) of pallet
-	// Note: Used to see if proposals can be submitted
-	#[pallet::type_value]
-	pub fn DefaultForBasePalletTime<T: Config>() -> BlockNumber<T> {
-		let current_block = 0u32; // Current block number
-
-		BlockNumber::<T>::from(current_block)
-	}
-
-	// Default for number of blocks yearly
-	// Note: Used to see if a year was passed
-	#[pallet::type_value]
-	pub fn DefaultForNumberOfBlocksYearly<T: Config>() -> BlockNumber<T> {
 		let seconds_in_year: u32 = 365 * 24 * 60 * 60;
-		let block_finalization_time: u32 = T::BlockFinalizationTime::get().into();
+		let seconds_in_month: u32 = 31 * 24 * 60 * 60;
+		let seconds_in_week: u32 = 7 * 24 * 60 * 60;
 
-		BlockNumber::<T>::from(seconds_in_year / block_finalization_time)
-	}
+		let blocks_in_year = seconds_in_year / block_finalization_time;
+		let blocks_in_month = seconds_in_month / block_finalization_time;
+		let blocks_in_week = seconds_in_week / block_finalization_time;
 
-	// Default penalty timeout time [in blocks]
-	#[pallet::type_value]
-	pub fn DefaultForPenaltyTimeoutTime<T: Config>() -> BlockNumber<T> {
-		let timeout_time: u32 = 31 * 24 * 60 * 60; // A MONTH in seconds
-		let block_finalization_time: u32 = T::BlockFinalizationTime::get().into();
+		let pallet_time_values: TimeValues<BlockNumber<T>> = TimeValues {
+			number_of_blocks_per_year: BlockNumber::<T>::from(blocks_in_year),
+			pallet_base_time: BlockNumber::<T>::from(0u32),
+			penalty_timeout: BlockNumber::<T>::from(blocks_in_month),
+			voting_timeout: BlockNumber::<T>::from(blocks_in_week),
+			sales_timeout: BlockNumber::<T>::from(blocks_in_week),
+		};
 
-		BlockNumber::<T>::from(timeout_time / block_finalization_time)
-	}
-
-	// Default voting timeout time [in blocks]
-	#[pallet::type_value]
-	pub fn DefaultForVotingTimeoutTime<T: Config>() -> BlockNumber<T> {
-		let timeout_time: u32 = 7 * 24 * 60 * 60; // A WEEK in seconds
-		let block_finalization_time: u32 = T::BlockFinalizationTime::get().into();
-
-		BlockNumber::<T>::from(timeout_time / block_finalization_time)
-	}
-
-	// Default sales timeout time [in blocks]
-	#[pallet::type_value]
-	pub fn DefaultForSalesTimeoutTime<T: Config>() -> BlockNumber<T> {
-		let timeout_time: u32 = 7 * 24 * 60 * 60; // A WEEK in seconds
-		let block_finalization_time: u32 = T::BlockFinalizationTime::get().into();
-
-		BlockNumber::<T>::from(timeout_time / block_finalization_time)
+		pallet_time_values
 	}
 
 	/// Pallet storages
-	// CF account fee
+	// Fee values
 	#[pallet::storage]
-	#[pallet::getter(fn cf_account_fee)]
-	pub type CFAccountFee<T: Config> =
-		StorageValue<_, BalanceOf<T>, ValueQuery, DefaultForCFAccountFee<T>>;
+	#[pallet::getter(fn pallet_fee_values)]
+	pub type PalletFeeValues<T: Config> =
+		StorageValue<_, FeeValues<BalanceOf<T>>, ValueQuery, DefaultForPalletFeeValues<T>>;
 
-	// Trader account fee
+	// Time values
 	#[pallet::storage]
-	#[pallet::getter(fn trader_account_fee)]
-	pub type TraderAccountFee<T: Config> =
-		StorageValue<_, BalanceOf<T>, ValueQuery, DefaultForTraderAccountFee<T>>;
-
-	// Project validator account fee
-	#[pallet::storage]
-	#[pallet::getter(fn project_validator_account_fee)]
-	pub type ProjectValidatorAccountFee<T: Config> =
-		StorageValue<_, BalanceOf<T>, ValueQuery, DefaultForProjectValidatorAccountFee<T>>;
-
-	// Project owner account fee
-	#[pallet::storage]
-	#[pallet::getter(fn project_owner_account_fee)]
-	pub type ProjectOwnerAccountFee<T: Config> =
-		StorageValue<_, BalanceOf<T>, ValueQuery, DefaultForProjectOwnerAccountFee<T>>;
-
-	// Pallet base time
-	#[pallet::storage]
-	#[pallet::getter(fn pallet_base_time)]
-	pub type BasePalletTime<T: Config> =
-		StorageValue<_, BlockNumber<T>, ValueQuery, DefaultForBasePalletTime<T>>;
-
-	// Number of blocks yearly
-	#[pallet::storage]
-	#[pallet::getter(fn number_of_blocks_per_year)]
-	pub type NumberOfBlocksYearlyStorage<T: Config> =
-		StorageValue<_, BlockNumber<T>, ValueQuery, DefaultForNumberOfBlocksYearly<T>>;
-
-	// Penalty timeout time
-	#[pallet::storage]
-	#[pallet::getter(fn penalty_timeout_time)]
-	pub type PenaltyTimeoutTime<T: Config> =
-		StorageValue<_, BlockNumber<T>, ValueQuery, DefaultForPenaltyTimeoutTime<T>>;
-
-	// Voting timeout time
-	#[pallet::storage]
-	#[pallet::getter(fn voting_timeout_time)]
-	pub type VotingTimeoutTime<T: Config> =
-		StorageValue<_, BlockNumber<T>, ValueQuery, DefaultForVotingTimeoutTime<T>>;
-
-	// Sales timeout time
-	#[pallet::storage]
-	#[pallet::getter(fn sales_timeout_time)]
-	pub type SalesTimeoutTime<T: Config> =
-		StorageValue<_, BlockNumber<T>, ValueQuery, DefaultForSalesTimeoutTime<T>>;
+	#[pallet::getter(fn pallet_time_values)]
+	pub type PalletTimeValues<T: Config> =
+		StorageValue<_, TimeValues<BlockNumber<T>>, ValueQuery, DefaultForPalletTimeValues<T>>;
 
 	// Authority accounts
 	#[pallet::storage]
@@ -377,7 +341,7 @@ pub mod pallet {
 		_,
 		Identity,
 		AccountIdOf<T>,
-		CFAccountInfo<MomentOf<T>, T::IPFSLength>,
+		CarbonFootprintAccountInfo<MomentOf<T>, T::IPFSLength>,
 		OptionQuery,
 	>;
 
@@ -394,7 +358,7 @@ pub mod pallet {
 		_,
 		Identity,
 		AccountIdOf<T>,
-		PVoPOInfo<T::IPFSLength, BlockNumber<T>>,
+		ProjectValidatorOrProjectOwnerInfo<T::IPFSLength, BlockNumber<T>>,
 		OptionQuery,
 	>;
 
@@ -405,7 +369,7 @@ pub mod pallet {
 		_,
 		Identity,
 		AccountIdOf<T>,
-		PVoPOInfo<T::IPFSLength, BlockNumber<T>>,
+		ProjectValidatorOrProjectOwnerInfo<T::IPFSLength, BlockNumber<T>>,
 		OptionQuery,
 	>;
 
@@ -456,7 +420,7 @@ pub mod pallet {
 		_,
 		Identity,
 		BoundedString<T::IPFSLength>,
-		CFReportInfo<AccountIdOf<T>, MomentOf<T>>,
+		CarbonFootprintReportInfo<AccountIdOf<T>, MomentOf<T>>,
 		OptionQuery,
 	>;
 
@@ -478,17 +442,17 @@ pub mod pallet {
 		_,
 		Identity,
 		BoundedString<T::IPFSLength>,
-		CCBProposalInfo<MomentOf<T>, BalanceOf<T>, AccountIdOf<T>>,
+		CarbonCreditBatchProposalInfo<MomentOf<T>, BalanceOf<T>, AccountIdOf<T>>,
 		OptionQuery,
 	>;
 
 	#[pallet::event]
 	#[pallet::generate_deposit(pub (super) fn deposit_event)]
 	pub enum Event<T: Config> {
-		/// Timeout time updated
-		TimeoutTimeUpdated(TimeoutType, BlockNumber<T>),
-		/// Fee amount updated
-		FeeAmountUpdated(FeeType, BalanceOf<T>),
+		/// Time value updated
+		TimeValueUpdated(TimeType, BlockNumber<T>),
+		/// Fee value updated
+		FeeValueUpdated(FeeType, BalanceOf<T>),
 		/// Trader Account Registered
 		TraderAccountRegistered(AccountIdOf<T>),
 		/// Project Validator Account Registered
@@ -507,6 +471,10 @@ pub mod pallet {
 
 	#[pallet::error]
 	pub enum Error<T> {
+		/// Unable to change pallet base time
+		UnableToChangePalletBaseTime,
+		/// UpdatingToCurrentValue
+		UpdatingToCurrentValue,
 		/// Insufficient funds
 		InsufficientFunds,
 		/// Report not found
@@ -541,13 +509,13 @@ pub mod pallet {
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
-		// Change specific timeout time
+		// Update specific time value
 		#[pallet::call_index(0)]
 		#[pallet::weight(0)]
-		pub fn change_timeout_time(
+		pub fn update_time_value(
 			origin: OriginFor<T>,
-			timeout_type: TimeoutType,
-			new_timeout_time: BlockNumber<T>,
+			time_type: TimeType,
+			new_time_value: BlockNumber<T>,
 		) -> DispatchResultWithPostInfo {
 			let user = ensure_signed(origin)?;
 
@@ -557,36 +525,71 @@ pub mod pallet {
 				Error::<T>::Unauthorized
 			);
 
-			// Check if the new timeout time is not 0
+			// Check if the user is trying to update the pallet base time
 			ensure!(
-				new_timeout_time != BlockNumber::<T>::from(0u32),
+				time_type != TimeType::PalletBaseTime,
+				Error::<T>::UnableToChangePalletBaseTime
+			);
+
+			// Check if the new time value is not 0
+			ensure!(
+				new_time_value != BlockNumber::<T>::from(0u32),
 				Error::<T>::InvalidTimeoutValue
 			);
 
-			match timeout_type {
-				TimeoutType::Penalty => {
-					PenaltyTimeoutTime::<T>::set(new_timeout_time);
+			let mut pallet_times = PalletTimeValues::<T>::get();
+
+			match time_type {
+				TimeType::NumberOfBlocksYearly => {
+					ensure!(
+						new_time_value != pallet_times.number_of_blocks_per_year,
+						Error::<T>::UpdatingToCurrentValue,
+					);
+
+					pallet_times =
+						TimeValues { number_of_blocks_per_year: new_time_value, ..pallet_times };
 				},
-				TimeoutType::Voting => {
-					VotingTimeoutTime::<T>::set(new_timeout_time);
+				TimeType::PenaltyTimeout => {
+					ensure!(
+						new_time_value != pallet_times.penalty_timeout,
+						Error::<T>::UpdatingToCurrentValue,
+					);
+
+					pallet_times = TimeValues { penalty_timeout: new_time_value, ..pallet_times };
 				},
-				TimeoutType::Sales => {
-					SalesTimeoutTime::<T>::set(new_timeout_time);
+				TimeType::VotingTimeout => {
+					ensure!(
+						new_time_value != pallet_times.voting_timeout,
+						Error::<T>::UpdatingToCurrentValue,
+					);
+
+					pallet_times = TimeValues { voting_timeout: new_time_value, ..pallet_times };
 				},
+				TimeType::SalesTimeout => {
+					ensure!(
+						new_time_value != pallet_times.sales_timeout,
+						Error::<T>::UpdatingToCurrentValue,
+					);
+
+					pallet_times = TimeValues { sales_timeout: new_time_value, ..pallet_times };
+				},
+				_ => {},
 			}
 
-			Self::deposit_event(Event::TimeoutTimeUpdated(timeout_type, new_timeout_time));
+			PalletTimeValues::<T>::set(pallet_times);
+
+			Self::deposit_event(Event::TimeValueUpdated(time_type, new_time_value));
 
 			Ok(().into())
 		}
 
-		// Change specific fee amount
+		// Update specific fee value
 		#[pallet::call_index(1)]
 		#[pallet::weight(0)]
-		pub fn change_fee_amount(
+		pub fn update_fee_value(
 			origin: OriginFor<T>,
 			fee_type: FeeType,
-			new_fee_amount: BalanceOf<T>,
+			new_fee_value: BalanceOf<T>,
 		) -> DispatchResultWithPostInfo {
 			let user = ensure_signed(origin)?;
 
@@ -596,19 +599,82 @@ pub mod pallet {
 				Error::<T>::Unauthorized
 			);
 
+			let mut pallet_fees = PalletFeeValues::<T>::get();
+
 			match fee_type {
 				FeeType::TraderAccountFee => {
-					TraderAccountFee::<T>::set(new_fee_amount);
+					ensure!(
+						new_fee_value != pallet_fees.trader_account_fee,
+						Error::<T>::UpdatingToCurrentValue,
+					);
+
+					pallet_fees = FeeValues { trader_account_fee: new_fee_value, ..pallet_fees };
 				},
 				FeeType::ProjectValidatorAccountFee => {
-					ProjectValidatorAccountFee::<T>::set(new_fee_amount);
+					ensure!(
+						new_fee_value != pallet_fees.project_validator_account_fee,
+						Error::<T>::UpdatingToCurrentValue,
+					);
+
+					pallet_fees =
+						FeeValues { project_validator_account_fee: new_fee_value, ..pallet_fees };
 				},
 				FeeType::ProjectOwnerAccountFee => {
-					ProjectOwnerAccountFee::<T>::set(new_fee_amount);
+					ensure!(
+						new_fee_value != pallet_fees.project_owner_account_fee,
+						Error::<T>::UpdatingToCurrentValue,
+					);
+
+					pallet_fees =
+						FeeValues { project_owner_account_fee: new_fee_value, ..pallet_fees };
+				},
+				FeeType::CarbonCreditReportFee => {
+					ensure!(
+						new_fee_value != pallet_fees.carbon_footprint_report_fee,
+						Error::<T>::UpdatingToCurrentValue,
+					);
+
+					pallet_fees =
+						FeeValues { carbon_footprint_report_fee: new_fee_value, ..pallet_fees };
+				},
+				FeeType::ProjectProposalFee => {
+					ensure!(
+						new_fee_value != pallet_fees.project_proposal_fee,
+						Error::<T>::UpdatingToCurrentValue,
+					);
+
+					pallet_fees = FeeValues { project_proposal_fee: new_fee_value, ..pallet_fees };
+				},
+				FeeType::CarbonCreditBatchFee => {
+					ensure!(
+						new_fee_value != pallet_fees.carbon_credit_batch_fee,
+						Error::<T>::UpdatingToCurrentValue,
+					);
+
+					pallet_fees =
+						FeeValues { carbon_credit_batch_fee: new_fee_value, ..pallet_fees };
+				},
+				FeeType::VotingFee => {
+					ensure!(
+						new_fee_value != pallet_fees.voting_fee,
+						Error::<T>::UpdatingToCurrentValue,
+					);
+
+					pallet_fees = FeeValues { voting_fee: new_fee_value, ..pallet_fees };
+				},
+				FeeType::ClaimFee => {
+					ensure!(
+						new_fee_value != pallet_fees.claim_fee,
+						Error::<T>::UpdatingToCurrentValue,
+					);
+
+					pallet_fees = FeeValues { claim_fee: new_fee_value, ..pallet_fees };
 				},
 			}
 
-			Self::deposit_event(Event::FeeAmountUpdated(fee_type, new_fee_amount));
+			PalletFeeValues::<T>::set(pallet_fees);
+
+			Self::deposit_event(Event::FeeValueUpdated(fee_type, new_fee_value));
 
 			Ok(().into())
 		}
@@ -630,7 +696,8 @@ pub mod pallet {
 
 			// Check if caller has sufficient funds
 			ensure!(
-				TraderAccountFee::<T>::get() <= T::Currency::free_balance(&user.clone()),
+				PalletFeeValues::<T>::get().trader_account_fee
+					<= T::Currency::free_balance(&user.clone()),
 				Error::<T>::InsufficientFunds
 			);
 
@@ -638,6 +705,14 @@ pub mod pallet {
 			let mut new_traders = TraderAccounts::<T>::get();
 			new_traders.insert(user.clone());
 			TraderAccounts::<T>::set(new_traders);
+
+			// Transfer funds
+			T::Currency::transfer(
+				&Self::account_id(),
+				&user,
+				PalletFeeValues::<T>::get().trader_account_fee,
+				ExistenceRequirement::KeepAlive,
+			)?;
 
 			// Deposit event
 			Self::deposit_event(Event::TraderAccountRegistered(user.clone()));
@@ -671,17 +746,27 @@ pub mod pallet {
 
 			// Check if caller has sufficient funds
 			ensure!(
-				ProjectValidatorAccountFee::<T>::get() <= T::Currency::free_balance(&user.clone()),
+				PalletFeeValues::<T>::get().project_validator_account_fee
+					<= T::Currency::free_balance(&user.clone()),
 				Error::<T>::InsufficientFunds
 			);
 
 			// Insert project validator account
-			let pvalidator_info: PVoPOInfo<T::IPFSLength, BlockNumber<T>> = PVoPOInfo {
-				documentation_ipfs: documentation_ipfs.clone(),
-				penalty_level: 0,
-				penalty_timeout: BlockNumber::<T>::from(0u32),
-			};
+			let pvalidator_info: ProjectValidatorOrProjectOwnerInfo<T::IPFSLength, BlockNumber<T>> =
+				ProjectValidatorOrProjectOwnerInfo {
+					documentation_ipfs: documentation_ipfs.clone(),
+					penalty_level: 0,
+					penalty_timeout: BlockNumber::<T>::from(0u32),
+				};
 			ProjectValidators::<T>::insert(user.clone(), pvalidator_info);
+
+			// Transfer funds
+			T::Currency::transfer(
+				&Self::account_id(),
+				&user,
+				PalletFeeValues::<T>::get().project_validator_account_fee,
+				ExistenceRequirement::KeepAlive,
+			)?;
 
 			// Deposit event
 			Self::deposit_event(Event::ProjectValidatorAccountRegistered(
@@ -718,17 +803,27 @@ pub mod pallet {
 
 			// Check if caller has sufficient funds
 			ensure!(
-				ProjectOwnerAccountFee::<T>::get() <= T::Currency::free_balance(&user.clone()),
+				PalletFeeValues::<T>::get().project_owner_account_fee
+					<= T::Currency::free_balance(&user.clone()),
 				Error::<T>::InsufficientFunds
 			);
 
 			// Insert project owner account
-			let powner_info: PVoPOInfo<T::IPFSLength, BlockNumber<T>> = PVoPOInfo {
-				documentation_ipfs: documentation_ipfs.clone(),
-				penalty_level: 0,
-				penalty_timeout: BlockNumber::<T>::from(0u32),
-			};
+			let powner_info: ProjectValidatorOrProjectOwnerInfo<T::IPFSLength, BlockNumber<T>> =
+				ProjectValidatorOrProjectOwnerInfo {
+					documentation_ipfs: documentation_ipfs.clone(),
+					penalty_level: 0,
+					penalty_timeout: BlockNumber::<T>::from(0u32),
+				};
 			ProjectOwners::<T>::insert(user.clone(), powner_info);
+
+			// Transfer funds
+			T::Currency::transfer(
+				&Self::account_id(),
+				&user,
+				PalletFeeValues::<T>::get().project_owner_account_fee,
+				ExistenceRequirement::KeepAlive,
+			)?;
 
 			// Deposit event
 			Self::deposit_event(Event::ProjectOwnerAccountRegistered(
@@ -768,7 +863,8 @@ pub mod pallet {
 
 			// Check if caller has sufficient funds
 			ensure!(
-				CFAccountFee::<T>::get() <= T::Currency::free_balance(&user.clone()),
+				PalletFeeValues::<T>::get().carbon_footprint_report_fee
+					<= T::Currency::free_balance(&user.clone()),
 				Error::<T>::InsufficientFunds
 			);
 
@@ -776,7 +872,7 @@ pub mod pallet {
 			let creation_date = T::Time::now();
 
 			// Carbon footprint info
-			let cf_report_info = CFReportInfo {
+			let cf_report_info = CarbonFootprintReportInfo {
 				cf_account: user.clone(),
 				creation_date,
 				carbon_balance,
@@ -790,7 +886,7 @@ pub mod pallet {
 
 			// Set for voting timeout
 			let current_block = frame_system::Pallet::<T>::block_number(); // Get current block number
-			let timeout_block = current_block + VotingTimeoutTime::<T>::get(); // Calculate voting timeout time
+			let timeout_block = current_block + PalletTimeValues::<T>::get().voting_timeout; // Calculate voting timeout time
 
 			let mut timeout_events = BTreeSet::<BoundedString<T::IPFSLength>>::new();
 
@@ -801,6 +897,14 @@ pub mod pallet {
 			timeout_events.insert(ipfs.clone());
 
 			VotingTimeouts::<T>::insert(timeout_block, timeout_events);
+
+			// Transfer funds
+			T::Currency::transfer(
+				&Self::account_id(),
+				&user,
+				PalletFeeValues::<T>::get().carbon_footprint_report_fee,
+				ExistenceRequirement::KeepAlive,
+			)?;
 
 			// Deposit event
 			Self::deposit_event(Event::CarbonFootprintReportSubmitted(user.clone(), ipfs));
@@ -822,8 +926,15 @@ pub mod pallet {
 			// Check if caller is Project Validator account
 			ensure!(ProjectValidators::<T>::contains_key(user.clone()), Error::<T>::Unauthorized);
 
+			// Check if caller has sufficient funds
+			ensure!(
+				PalletFeeValues::<T>::get().voting_fee
+					<= T::Currency::free_balance(&user.clone()),
+				Error::<T>::InsufficientFunds
+			);
+
 			match vote_type {
-				VoteType::CFReportVote => {
+				VoteType::CarbonFootprintReportVote => {
 					// Get report info and return error if it does not exist
 					let mut report =
 						CFReports::<T>::get(ipfs.clone()).ok_or(Error::<T>::CFReportNotFound)?;
@@ -845,7 +956,7 @@ pub mod pallet {
 
 					CFReports::<T>::insert(ipfs.clone(), report);
 				},
-				VoteType::PProposalVote => {
+				VoteType::ProjectProposalVote => {
 					// Get proposal info or return error if it does not exist
 					let mut proposal = ProjectProposals::<T>::get(ipfs.clone())
 						.ok_or(Error::<T>::ProjectProposalNotFound)?;
@@ -868,7 +979,7 @@ pub mod pallet {
 
 					ProjectProposals::<T>::insert(ipfs.clone(), proposal);
 				},
-				VoteType::CCBatchVote => {
+				VoteType::CarbonCreditBatchVote => {
 					// Get carbon credit batch proposal info or return error if it does not exist
 					let mut batch = CCBProposals::<T>::get(ipfs.clone())
 						.ok_or(Error::<T>::CCBProposalNotFound)?;
@@ -891,6 +1002,14 @@ pub mod pallet {
 					CCBProposals::<T>::insert(ipfs.clone(), batch);
 				},
 			}
+
+			// Transfer funds
+			T::Currency::transfer(
+				&Self::account_id(),
+				&user,
+				PalletFeeValues::<T>::get().voting_fee,
+				ExistenceRequirement::KeepAlive,
+			)?;
 
 			Self::deposit_event(Event::SuccessfulVote(user.clone(), ipfs.clone(), vote_type, vote));
 
@@ -921,6 +1040,13 @@ pub mod pallet {
 				Error::<T>::DocumentationWasUsedPreviously
 			);
 
+			// Check if caller has sufficient funds
+			ensure!(
+				PalletFeeValues::<T>::get().project_proposal_fee
+					<= T::Currency::free_balance(&user.clone()),
+				Error::<T>::InsufficientFunds
+			);
+
 			// Get time
 			let creation_date = T::Time::now();
 
@@ -944,7 +1070,7 @@ pub mod pallet {
 
 			// Set for voting timeout
 			let current_block = frame_system::Pallet::<T>::block_number(); // Get current block number
-			let timeout_block = current_block + VotingTimeoutTime::<T>::get(); // Calculate voting timeout time
+			let timeout_block = current_block + PalletTimeValues::<T>::get().voting_timeout; // Calculate voting timeout time
 
 			let mut timeout_events = BTreeSet::<BoundedString<T::IPFSLength>>::new();
 
@@ -955,6 +1081,15 @@ pub mod pallet {
 			timeout_events.insert(ipfs.clone());
 
 			VotingTimeouts::<T>::insert(timeout_block, timeout_events);
+
+			// Transfer funds
+			T::Currency::transfer(
+				&Self::account_id(),
+				&user,
+				PalletFeeValues::<T>::get().project_proposal_fee,
+				ExistenceRequirement::KeepAlive,
+			)?;
+
 
 			// Deposit event
 			Self::deposit_event(Event::ProjectProposalCreated(user.clone(), ipfs));
@@ -990,6 +1125,13 @@ pub mod pallet {
 				Error::<T>::DocumentationWasUsedPreviously
 			);
 
+			// Check if caller has sufficient funds
+			ensure!(
+				PalletFeeValues::<T>::get().carbon_credit_batch_fee
+					<= T::Currency::free_balance(&user.clone()),
+				Error::<T>::InsufficientFunds
+			);
+
 			// Create batch hash
 			let nonce = frame_system::Pallet::<T>::account_nonce(&user);
 			let encoded: [u8; 32] = (&user, nonce).using_encoded(blake2_256);
@@ -999,7 +1141,7 @@ pub mod pallet {
 			let creation_date = T::Time::now();
 
 			// CCB Proposal info
-			let ccb_proposal_info = CCBProposalInfo {
+			let ccb_proposal_info = CarbonCreditBatchProposalInfo {
 				project_hash,
 				batch_hash,
 				creation_date,
@@ -1015,7 +1157,7 @@ pub mod pallet {
 
 			// Set for voting timeout
 			let current_block = frame_system::Pallet::<T>::block_number(); // Get current block number
-			let timeout_block = current_block + VotingTimeoutTime::<T>::get(); // Calculate voting timeout time
+			let timeout_block = current_block + PalletTimeValues::<T>::get().voting_timeout; // Calculate voting timeout time
 
 			let mut timeout_events = BTreeSet::<BoundedString<T::IPFSLength>>::new();
 
@@ -1026,6 +1168,14 @@ pub mod pallet {
 			timeout_events.insert(ipfs.clone());
 
 			VotingTimeouts::<T>::insert(timeout_block, timeout_events);
+
+			// Transfer funds
+			T::Currency::transfer(
+				&Self::account_id(),
+				&user,
+				PalletFeeValues::<T>::get().carbon_credit_batch_fee,
+				ExistenceRequirement::KeepAlive,
+			)?;
 
 			// Deposit event
 			Self::deposit_event(Event::CarbonCreditBatchProposalCreated(user.clone(), ipfs));
@@ -1059,7 +1209,7 @@ pub mod pallet {
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
 		fn on_initialize(now: BlockNumber<T>) -> Weight {
-			let consumed_weight = Self::update_base_pallet_time(now);
+			let consumed_weight = Self::update_pallet_base_time(now);
 
 			consumed_weight
 		}
@@ -1085,6 +1235,11 @@ pub mod pallet {
 	}
 
 	impl<T: Config> Pallet<T> {
+		// Get account ID of pallet
+		fn account_id() -> T::AccountId {
+			PALLET_ID.into_account_truncating()
+		}
+
 		// Check if the documentation (ipfs link) has been used previously
 		// Return false if the documentation is used
 		// Return true if the documentation is available
@@ -1170,15 +1325,17 @@ pub mod pallet {
 
 		// Check if a year has passed and update pallet base time if it has
 		// Note: The base pallet time will update once a year has passed (in blocks)
-		pub fn update_base_pallet_time(now: BlockNumber<T>) -> Weight {
+		pub fn update_pallet_base_time(now: BlockNumber<T>) -> Weight {
 			let mut counter: u64 = 0;
 
-			let base_pallet_time = BasePalletTime::<T>::get();
+			let mut pallet_times = PalletTimeValues::<T>::get();
 
-			if base_pallet_time == 0u32.into()
-				|| now == base_pallet_time + NumberOfBlocksYearlyStorage::<T>::get()
+			if pallet_times.pallet_base_time == BlockNumber::<T>::from(0u32)
+				|| now == pallet_times.pallet_base_time + pallet_times.number_of_blocks_per_year
 			{
-				BasePalletTime::<T>::set(now);
+				pallet_times = TimeValues { pallet_base_time: now, ..pallet_times };
+
+				PalletTimeValues::<T>::set(pallet_times);
 
 				counter += 1;
 			}
