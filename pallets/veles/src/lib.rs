@@ -37,8 +37,8 @@ pub struct ProjectValidatorOrProjectOwnerInfo<IPFSLength: Get<u32>, BlockNumber>
 pub struct CarbonFootprintAccountInfo<MomentOf, IPFSLength: Get<u32>> {
 	// IPFS links to CFA documentation
 	documentation_ipfses: BTreeSet<BoundedString<IPFSLength>>,
-	// Carbon credit balance
-	carbon_credit_balance: i128,
+	// Carbon footprint balance
+	carbon_footprint_balance: i128,
 	// Creation date
 	creation_date: MomentOf,
 }
@@ -51,8 +51,8 @@ pub struct CarbonFootprintReportInfo<AccountIdOf, MomentOf> {
 	cf_account: AccountIdOf,
 	// Creation date
 	creation_date: MomentOf,
-	// Carbon balance (aka Carbon footprint)
-	carbon_balance: i128,
+	// Carbon footprint balance (aka Carbon footprint)
+	carbon_footprint_balance: i128,
 	// Votes for
 	votes_for: BTreeSet<AccountIdOf>,
 	// Votes against
@@ -90,7 +90,7 @@ pub struct CarbonCreditBatchProposalInfo<MomentOf, BalanceOf, AccountIdOf> {
 	// Creation date
 	creation_date: MomentOf,
 	// Carbon credit amount
-	credit_amount: i128,
+	credit_amount: u128,
 	// Initial carbon credit price
 	initial_credit_price: BalanceOf,
 	// Votes for
@@ -105,9 +105,11 @@ pub struct CarbonCreditBatchProposalInfo<MomentOf, BalanceOf, AccountIdOf> {
 #[derive(Encode, Decode, Clone, Default, PartialEq, Eq, scale_info::TypeInfo)]
 #[cfg_attr(feature = "std", derive(Debug))]
 #[scale_info(skip_type_params(IPFSLength))]
-pub struct ProjectInfo<IPFSLength: Get<u32>, MomentOf, BlockNumber> {
+pub struct ProjectInfo<IPFSLength: Get<u32>, AccountIdOf, MomentOf, BlockNumber> {
 	// IPFS link to project documentation
 	documentation_ipfs: BoundedString<IPFSLength>,
+	// Project owner
+	project_owner: AccountIdOf,
 	// Creation date
 	creation_date: MomentOf,
 	// Penalty level
@@ -117,20 +119,30 @@ pub struct ProjectInfo<IPFSLength: Get<u32>, MomentOf, BlockNumber> {
 }
 
 // Carbon credit batch info structure
-#[derive(Encode, Decode, Clone, Default, PartialEq, Eq, scale_info::TypeInfo)]
+#[derive(Encode, Decode, Clone, PartialEq, Eq, scale_info::TypeInfo)]
 #[cfg_attr(feature = "std", derive(Debug))]
 #[scale_info(skip_type_params(IPFSLength))]
-pub struct CarbonCreditBatchInfo<IPFSLength: Get<u32>, MomentOf, BalanceOf, VoteType> {
+pub struct CarbonCreditBatchInfo<IPFSLength: Get<u32>, MomentOf, BalanceOf, CarbonCreditBatchStatus> {
 	// IPFS link to CFA documentation
 	documentation_ipfs: BoundedString<IPFSLength>,
 	// Creation date
 	creation_date: MomentOf,
 	// Carbon credit amount
-	credit_amount: i128,
+	credit_amount: u128,
 	// Initial carbon credit price
 	initial_credit_price: BalanceOf,
 	// Batch status
-	status: VoteType,
+	status: CarbonCreditBatchStatus,
+}
+
+// Carbon credit holding info structure
+#[derive(Encode, Decode, Clone, PartialEq, Eq, scale_info::TypeInfo)]
+#[cfg_attr(feature = "std", derive(Debug))]
+pub struct CarbonCreditHoldingsInfo {
+	// Amount of available tokens for sale and retirment
+	available_amount: u128,
+	// Amount of unavailable tokens that are currently in a sales cycle
+	unavailable_amount: u128,
 }
 
 // Penalty level structure for carbon footprint
@@ -139,6 +151,25 @@ pub struct CarbonCreditBatchInfo<IPFSLength: Get<u32>, MomentOf, BalanceOf, Vote
 pub struct PenaltyLevelConfig {
 	pub level: u8, 	// Penalty level
 	pub base: i32, 	// Balance
+}
+
+// Proportion structure (used for vote ratio calculations)
+#[derive(Encode, Decode, Default, PartialEq, Eq, scale_info::TypeInfo)]
+#[cfg_attr(feature = "std", derive(Debug))]
+pub struct ProportionStructure {
+	// Explanation:
+	// Let's consider that we have the 3/4 proportion, we will say that the upper limit part of this
+	// proportion is the number 4 while the proportion part is the number 3. 
+	//
+	// Example:
+	// Let's say that we need 3/4 of the total number of votes in order for a proposal to pass, this means
+	// that we need 75% (0.75) vote in order for our vote to pass. Let's now say that there was a total of a 100
+	// votes. In order to calculate this proportion without using a float point number for the proportion, we can 
+	// first multiply the total votes by the proportion part of our proportion (100 * 3 = 300) and then devide it by
+	// the upper limit part of out proportion (300 / 4 = 75) which will give us the exact proportion that we need 
+	
+	pub proportion_part: u16,
+	pub upper_limit_part: u16,
 }
 
 // Vote type enum
@@ -253,9 +284,9 @@ pub mod pallet {
 
 	/// Pallet types and constants
 	type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
-	type MomentOf<T> = <<T as Config>::Time as Time>::Moment;
-	type BlockNumber<T> = BlockNumberFor<T>;
-	type BalanceOf<T> = <<T as Config>::Currency as Currency<AccountIdOf<T>>>::Balance;
+	pub type MomentOf<T> = <<T as Config>::Time as Time>::Moment;
+	pub type BlockNumber<T> = BlockNumberFor<T>;
+	pub type BalanceOf<T> = <<T as Config>::Currency as Currency<AccountIdOf<T>>>::Balance;
 
 	/// Helper functions
 	// Default authority accounts
@@ -315,6 +346,30 @@ pub mod pallet {
 		pallet_time_values
 	}
 
+	// Default value for voting ratio needed for a vote to pass
+	// Note: If the upper_limit_part is set to 0 then we will consider that we only need a 
+	// 1 vote difference to decide what is the outcome of the vote. If we set the proportion_part to 
+	// a number that is equal to the upper_limit_part or that is greater then it then we will need 
+	// a 100% of votes in order to made a passing/non passing decision
+	#[pallet::type_value]
+	pub fn DefaultForVotePassRatio<T: Config>() -> ProportionStructure {
+		let mut proportion_part: u16 = 1;
+		let upper_limit_part: u16 = 6;
+
+		if upper_limit_part == 0 {
+			proportion_part = 0;
+		} else if proportion_part >= upper_limit_part {
+			proportion_part = upper_limit_part;
+		}
+
+		let pass_voting_ratio =  ProportionStructure {
+			proportion_part,
+			upper_limit_part,
+		};
+		
+		pass_voting_ratio
+	}
+
 	/// Pallet storages
 	// Fee values
 	#[pallet::storage]
@@ -327,6 +382,12 @@ pub mod pallet {
 	#[pallet::getter(fn pallet_time_values)]
 	pub type PalletTimeValues<T: Config> =
 		StorageValue<_, TimeValues<BlockNumber<T>>, ValueQuery, DefaultForPalletTimeValues<T>>;
+
+	// Pass voting ratio
+	#[pallet::storage]
+	#[pallet::getter(fn vote_pass_ratio)]
+	pub type VotePassRatio<T: Config> =
+		StorageValue<_, ProportionStructure, ValueQuery, DefaultForVotePassRatio<T>>;
 
 	// Authority accounts
 	#[pallet::storage]
@@ -380,8 +441,34 @@ pub mod pallet {
 		_,
 		Identity,
 		H256,
-		ProjectInfo<T::IPFSLength, MomentOf<T>, BlockNumber<T>>,
+		ProjectInfo<T::IPFSLength, AccountIdOf<T>, MomentOf<T>, BlockNumber<T>>,
 		OptionQuery,
+	>;
+
+	// Carbon credit batches
+	#[pallet::storage]
+	#[pallet::getter(fn carbon_credit_batches)]
+	pub(super) type CarbonCreditBatches<T: Config> = StorageDoubleMap<
+		_,
+        Identity,
+        H256,
+        Identity,
+        H256,
+        CarbonCreditBatchInfo<T::IPFSLength, MomentOf<T>, BalanceOf<T>, CarbonCreditBatchStatus>,
+        OptionQuery,
+	>;
+
+	// Carbon credit holdings
+	#[pallet::storage]
+	#[pallet::getter(fn carbon_credit_holdings)]
+	pub(super) type CarbonCreditHoldings<T: Config> = StorageDoubleMap<
+		_,
+        Identity,
+        H256,
+        Identity,
+        AccountIdOf<T>,
+        CarbonCreditHoldingsInfo,
+        OptionQuery,
 	>;
 
 	// Penalty timeouts (for AccountID's)
@@ -416,7 +503,7 @@ pub mod pallet {
 	// Carbon footprint reports
 	#[pallet::storage]
 	#[pallet::getter(fn carbon_footprint_reports)]
-	pub(super) type CFReports<T: Config> = StorageMap<
+	pub(super) type CarbonFootprintReports<T: Config> = StorageMap<
 		_,
 		Identity,
 		BoundedString<T::IPFSLength>,
@@ -438,7 +525,7 @@ pub mod pallet {
 	// Carbon Credit Batch proposals
 	#[pallet::storage]
 	#[pallet::getter(fn carbon_credit_batch_proposals)]
-	pub(super) type CCBProposals<T: Config> = StorageMap<
+	pub(super) type CarbonCreditBatchProposals<T: Config> = StorageMap<
 		_,
 		Identity,
 		BoundedString<T::IPFSLength>,
@@ -449,10 +536,12 @@ pub mod pallet {
 	#[pallet::event]
 	#[pallet::generate_deposit(pub (super) fn deposit_event)]
 	pub enum Event<T: Config> {
-		/// Time value updated
+		/// Time Value Updated
 		TimeValueUpdated(TimeType, BlockNumber<T>),
-		/// Fee value updated
+		/// Fee Value Updated
 		FeeValueUpdated(FeeType, BalanceOf<T>),
+		/// Vote Pass Ration Updated
+		VotePassRatioUpdated(u16, u16),
 		/// Trader Account Registered
 		TraderAccountRegistered(AccountIdOf<T>),
 		/// Project Validator Account Registered
@@ -478,7 +567,7 @@ pub mod pallet {
 		/// Insufficient funds
 		InsufficientFunds,
 		/// Report not found
-		CFReportNotFound,
+		CarbonFootprintReportNotFound,
 		/// Not Authorized
 		Unauthorized,
 		/// Invalid timeout value
@@ -502,15 +591,50 @@ pub mod pallet {
 		/// Account ID already in use
 		AccountIdAlreadyInUse,
 		/// Already submitted a CF report
-		CFReportAlreadySubmitted,
+		CarbonFootprintReportAlreadySubmitted,
 		/// User is active in CF report voting cycle
-		UserIsActiveInCFReportVotingCycle,
+		UserIsActiveInCarbonFootprintReportVotingCycle,
 	}
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
-		// Update specific time value
+		// Update voting ratio
 		#[pallet::call_index(0)]
+		#[pallet::weight(0)]
+		pub fn update_vote_pass_ratio(origin: OriginFor<T>,
+			new_proportion_part: u16,
+			new_upper_limit_part: u16,
+		) -> DispatchResultWithPostInfo {
+			let user = ensure_signed(origin)?;
+
+			// Check if caller is a Authority account
+			ensure!(
+				AuthorityAccounts::<T>::get().contains(&user.clone()),
+				Error::<T>::Unauthorized
+			);
+
+			let mut temp_proportion_part = new_proportion_part;
+
+			if new_upper_limit_part == 0 {
+				temp_proportion_part = 0;
+			} else if new_proportion_part >= new_upper_limit_part {
+				temp_proportion_part = new_upper_limit_part;
+			}
+
+			let new_pass_voting_ratio =  ProportionStructure {
+				proportion_part: temp_proportion_part,
+				upper_limit_part: new_upper_limit_part,
+			};
+			
+			VotePassRatio::<T>::set(new_pass_voting_ratio);
+
+			Self::deposit_event(Event::VotePassRatioUpdated(temp_proportion_part, new_upper_limit_part));
+
+			Ok(().into())
+		}
+
+		// Update specific time value
+		#[pallet::call_index(1)]
 		#[pallet::weight(0)]
 		pub fn update_time_value(
 			origin: OriginFor<T>,
@@ -584,7 +708,7 @@ pub mod pallet {
 		}
 
 		// Update specific fee value
-		#[pallet::call_index(1)]
+		#[pallet::call_index(2)]
 		#[pallet::weight(0)]
 		pub fn update_fee_value(
 			origin: OriginFor<T>,
@@ -680,7 +804,7 @@ pub mod pallet {
 		}
 
 		// Register for a trader account
-		#[pallet::call_index(2)]
+		#[pallet::call_index(3)]
 		#[pallet::weight(0)]
 		pub fn register_for_trader_account(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
 			let user = ensure_signed(origin)?;
@@ -691,7 +815,7 @@ pub mod pallet {
 			// Check if the user is active in a CF report voting cycle
 			ensure!(
 				!Self::is_trying_to_register_as_cfa(user.clone()),
-				Error::<T>::UserIsActiveInCFReportVotingCycle
+				Error::<T>::UserIsActiveInCarbonFootprintReportVotingCycle
 			);
 
 			// Check if caller has sufficient funds
@@ -721,7 +845,7 @@ pub mod pallet {
 		}
 
 		// Register for a project validator account
-		#[pallet::call_index(3)]
+		#[pallet::call_index(4)]
 		#[pallet::weight(0)]
 		pub fn register_for_project_validator_account(
 			origin: OriginFor<T>,
@@ -735,7 +859,7 @@ pub mod pallet {
 			// Check if the user is active in a CF report voting cycle
 			ensure!(
 				!Self::is_trying_to_register_as_cfa(user.clone()),
-				Error::<T>::UserIsActiveInCFReportVotingCycle
+				Error::<T>::UserIsActiveInCarbonFootprintReportVotingCycle
 			);
 
 			// Check if the documentation (IPFS link) has been used previously
@@ -752,13 +876,13 @@ pub mod pallet {
 			);
 
 			// Insert project validator account
-			let pvalidator_info: ProjectValidatorOrProjectOwnerInfo<T::IPFSLength, BlockNumber<T>> =
+			let validator_info: ProjectValidatorOrProjectOwnerInfo<T::IPFSLength, BlockNumber<T>> =
 				ProjectValidatorOrProjectOwnerInfo {
 					documentation_ipfs: documentation_ipfs.clone(),
 					penalty_level: 0,
 					penalty_timeout: BlockNumber::<T>::from(0u32),
 				};
-			ProjectValidators::<T>::insert(user.clone(), pvalidator_info);
+			ProjectValidators::<T>::insert(user.clone(), validator_info);
 
 			// Transfer funds
 			T::Currency::transfer(
@@ -778,7 +902,7 @@ pub mod pallet {
 		}
 
 		// Register for a project owner account
-		#[pallet::call_index(4)]
+		#[pallet::call_index(5)]
 		#[pallet::weight(0)]
 		pub fn register_for_project_owner_account(
 			origin: OriginFor<T>,
@@ -792,7 +916,7 @@ pub mod pallet {
 			// Check if the user is active in a CF report voting cycle
 			ensure!(
 				!Self::is_trying_to_register_as_cfa(user.clone()),
-				Error::<T>::UserIsActiveInCFReportVotingCycle
+				Error::<T>::UserIsActiveInCarbonFootprintReportVotingCycle
 			);
 
 			// Check if the documentation (IPFS link) has been used previously
@@ -809,13 +933,13 @@ pub mod pallet {
 			);
 
 			// Insert project owner account
-			let powner_info: ProjectValidatorOrProjectOwnerInfo<T::IPFSLength, BlockNumber<T>> =
+			let owner_info: ProjectValidatorOrProjectOwnerInfo<T::IPFSLength, BlockNumber<T>> =
 				ProjectValidatorOrProjectOwnerInfo {
 					documentation_ipfs: documentation_ipfs.clone(),
 					penalty_level: 0,
 					penalty_timeout: BlockNumber::<T>::from(0u32),
 				};
-			ProjectOwners::<T>::insert(user.clone(), powner_info);
+			ProjectOwners::<T>::insert(user.clone(), owner_info);
 
 			// Transfer funds
 			T::Currency::transfer(
@@ -837,10 +961,10 @@ pub mod pallet {
 		// Submit carbon footprint report
 		#[pallet::call_index(6)]
 		#[pallet::weight(0)]
-		pub fn submit_cfreport(
+		pub fn submit_carbon_footprint_report(
 			origin: OriginFor<T>,
 			ipfs: BoundedString<T::IPFSLength>,
-			carbon_balance: i128,
+			carbon_footprint_balance: i128,
 		) -> DispatchResultWithPostInfo {
 			let user = ensure_signed(origin)?;
 
@@ -858,7 +982,7 @@ pub mod pallet {
 			// Check if the user has already submited a CF report
 			ensure!(
 				!Self::is_trying_to_register_as_cfa(user.clone()),
-				Error::<T>::CFReportAlreadySubmitted
+				Error::<T>::CarbonFootprintReportAlreadySubmitted
 			);
 
 			// Check if caller has sufficient funds
@@ -872,21 +996,21 @@ pub mod pallet {
 			let creation_date = T::Time::now();
 
 			// Carbon footprint info
-			let cf_report_info = CarbonFootprintReportInfo {
+			let report_info = CarbonFootprintReportInfo {
 				cf_account: user.clone(),
 				creation_date,
-				carbon_balance,
+				carbon_footprint_balance,
 				votes_for: BTreeSet::<AccountIdOf<T>>::new(),
 				votes_against: BTreeSet::<AccountIdOf<T>>::new(),
 				voting_active: true,
 			};
 
 			// Write to info storage
-			CFReports::<T>::insert(ipfs.clone(), cf_report_info);
+			CarbonFootprintReports::<T>::insert(ipfs.clone(), report_info);
 
-			// Set for voting timeout
-			let current_block = frame_system::Pallet::<T>::block_number(); // Get current block number
-			let timeout_block = current_block + PalletTimeValues::<T>::get().voting_timeout; // Calculate voting timeout time
+			// Set voting timeout
+			let current_block = frame_system::Pallet::<T>::block_number(); 					
+			let timeout_block = current_block + PalletTimeValues::<T>::get().voting_timeout;
 
 			let mut timeout_events = BTreeSet::<BoundedString<T::IPFSLength>>::new();
 
@@ -913,7 +1037,7 @@ pub mod pallet {
 		}
 
 		// Vote for/against Carbon Deficit Reports or for/against project Proposals
-		#[pallet::call_index(5)]
+		#[pallet::call_index(7)]
 		#[pallet::weight(0)]
 		pub fn cast_vote(
 			origin: OriginFor<T>,
@@ -937,7 +1061,7 @@ pub mod pallet {
 				VoteType::CarbonFootprintReportVote => {
 					// Get report info and return error if it does not exist
 					let mut report =
-						CFReports::<T>::get(ipfs.clone()).ok_or(Error::<T>::CFReportNotFound)?;
+						CarbonFootprintReports::<T>::get(ipfs.clone()).ok_or(Error::<T>::CarbonFootprintReportNotFound)?;
 
 					// Check if the voting cycle is over
 					ensure!(report.voting_active, Error::<T>::VotingCycleIsOver);
@@ -954,7 +1078,7 @@ pub mod pallet {
 						report.votes_against.insert(user.clone());
 					};
 
-					CFReports::<T>::insert(ipfs.clone(), report);
+					CarbonFootprintReports::<T>::insert(ipfs.clone(), report);
 				},
 				VoteType::ProjectProposalVote => {
 					// Get proposal info or return error if it does not exist
@@ -981,7 +1105,7 @@ pub mod pallet {
 				},
 				VoteType::CarbonCreditBatchVote => {
 					// Get carbon credit batch proposal info or return error if it does not exist
-					let mut batch = CCBProposals::<T>::get(ipfs.clone())
+					let mut batch = CarbonCreditBatchProposals::<T>::get(ipfs.clone())
 						.ok_or(Error::<T>::CCBProposalNotFound)?;
 
 					// Check if the voting cycle is over
@@ -999,7 +1123,7 @@ pub mod pallet {
 						batch.votes_against.insert(user.clone());
 					};
 
-					CCBProposals::<T>::insert(ipfs.clone(), batch);
+					CarbonCreditBatchProposals::<T>::insert(ipfs.clone(), batch);
 				},
 			}
 
@@ -1017,7 +1141,7 @@ pub mod pallet {
 		}
 
 		// Propose project
-		#[pallet::call_index(7)]
+		#[pallet::call_index(8)]
 		#[pallet::weight(0)]
 		pub fn propose_project(
 			origin: OriginFor<T>,
@@ -1056,7 +1180,7 @@ pub mod pallet {
 			let project_hash = H256::from(encoded);
 
 			// Project Proposal info
-			let project_proposal_info = ProjectProposalInfo {
+			let proposal_info = ProjectProposalInfo {
 				project_owner: user.clone(),
 				creation_date,
 				project_hash,
@@ -1066,11 +1190,11 @@ pub mod pallet {
 			};
 
 			// Write to info storage
-			ProjectProposals::<T>::insert(ipfs.clone(), project_proposal_info);
+			ProjectProposals::<T>::insert(ipfs.clone(), proposal_info);
 
 			// Set for voting timeout
-			let current_block = frame_system::Pallet::<T>::block_number(); // Get current block number
-			let timeout_block = current_block + PalletTimeValues::<T>::get().voting_timeout; // Calculate voting timeout time
+			let current_block = frame_system::Pallet::<T>::block_number();
+			let timeout_block = current_block + PalletTimeValues::<T>::get().voting_timeout;
 
 			let mut timeout_events = BTreeSet::<BoundedString<T::IPFSLength>>::new();
 
@@ -1098,12 +1222,12 @@ pub mod pallet {
 		}
 
 		// Propose carbon credit batch
-		#[pallet::call_index(8)]
+		#[pallet::call_index(9)]
 		#[pallet::weight(0)]
 		pub fn propose_carbon_credit_batch(
 			origin: OriginFor<T>,
 			project_hash: H256,
-			credit_amount: i128,
+			credit_amount: u128,
 			initial_credit_price: BalanceOf<T>,
 			ipfs: BoundedString<T::IPFSLength>,
 		) -> DispatchResultWithPostInfo {
@@ -1141,7 +1265,7 @@ pub mod pallet {
 			let creation_date = T::Time::now();
 
 			// CCB Proposal info
-			let ccb_proposal_info = CarbonCreditBatchProposalInfo {
+			let proposal_info = CarbonCreditBatchProposalInfo {
 				project_hash,
 				batch_hash,
 				creation_date,
@@ -1153,11 +1277,11 @@ pub mod pallet {
 			};
 
 			// Write to info storage
-			CCBProposals::<T>::insert(ipfs.clone(), ccb_proposal_info);
+			CarbonCreditBatchProposals::<T>::insert(ipfs.clone(), proposal_info);
 
 			// Set for voting timeout
-			let current_block = frame_system::Pallet::<T>::block_number(); // Get current block number
-			let timeout_block = current_block + PalletTimeValues::<T>::get().voting_timeout; // Calculate voting timeout time
+			let current_block = frame_system::Pallet::<T>::block_number();
+			let timeout_block = current_block + PalletTimeValues::<T>::get().voting_timeout;
 
 			let mut timeout_events = BTreeSet::<BoundedString<T::IPFSLength>>::new();
 
@@ -1245,9 +1369,9 @@ pub mod pallet {
 		// Return true if the documentation is available
 		pub fn is_ipfs_available(ipfs: BoundedString<T::IPFSLength>) -> bool {
 			// Check in reports and proposals
-			if CFReports::<T>::contains_key(ipfs.clone())
+			if CarbonFootprintReports::<T>::contains_key(ipfs.clone())
 				|| ProjectProposals::<T>::contains_key(ipfs.clone())
-				|| CCBProposals::<T>::contains_key(ipfs.clone())
+				|| CarbonCreditBatchProposals::<T>::contains_key(ipfs.clone())
 			{
 				return false;
 			}
@@ -1313,7 +1437,7 @@ pub mod pallet {
 		// Note: If a user has submitted a CF report he/she then can not registed as another account type
 		pub fn is_trying_to_register_as_cfa(account_id: AccountIdOf<T>) -> bool {
 			// Check in CF accounts
-			for (_, cf_report) in <CFReports<T>>::iter() {
+			for (_, cf_report) in <CarbonFootprintReports<T>>::iter() {
 				// Check if user has an active CF report that is up for voting
 				if cf_report.cf_account == account_id && cf_report.voting_active {
 					return true;
@@ -1343,6 +1467,211 @@ pub mod pallet {
 			T::DbWeight::get()
 				.reads(counter)
 				.saturating_add(T::DbWeight::get().writes(counter))
+		}
+
+		// Check if any voting timeout event has occured
+		pub fn check_voting_timeouts(now: BlockNumber<T>) -> Weight {
+			let mut counter: u64 = 0;
+
+			if VotingTimeouts::<T>::contains_key(now) {
+				let timeout_events: BTreeSet<BoundedString<T::IPFSLength>> = VotingTimeouts::<T>::get(now).unwrap();
+				
+ 
+				for ipfs in timeout_events.iter() {
+					// Check if IPFS is related to a carbon footprint report 
+					if CarbonFootprintReports::<T>::contains_key(ipfs.clone()) {
+						let report = CarbonFootprintReports::<T>::get(ipfs.clone()).unwrap();
+						
+						Self::update_carbon_footprint_account(report, ipfs.clone());
+
+						counter += 1;
+					}
+
+					// Check if IPFS is related to a project proposal
+					if ProjectProposals::<T>::contains_key(ipfs.clone()) {
+						let proposal = ProjectProposals::<T>::get(ipfs.clone()).unwrap();
+
+						Self::update_project_proposal(proposal, ipfs.clone());
+
+						counter += 1;
+					}
+
+					// Check if IPFS is related to a carbon credits batch proposal
+					if CarbonCreditBatchProposals::<T>::contains_key(ipfs.clone()) {
+						let proposal = CarbonCreditBatchProposals::<T>::get(ipfs.clone()).unwrap();
+						
+						Self::update_carbon_credit_batch(proposal, ipfs.clone());
+
+						counter += 1;
+					}
+				}
+
+				VotingTimeouts::<T>::remove(now);
+			}
+
+			T::DbWeight::get()
+				.reads(counter)
+				.saturating_add(T::DbWeight::get().writes(counter))
+		}
+
+		// Update carbon footprint account after voting ends
+		pub fn update_carbon_footprint_account(report: CarbonFootprintReportInfo<AccountIdOf<T>, MomentOf<T>>, ipfs: BoundedString<T::IPFSLength>) {
+			// Get the votes that were made for the report
+			let votes_for: u16 = report.votes_for.len().try_into().unwrap();
+			let votes_against: u16 = report.votes_against.len().try_into().unwrap();
+			let votes_total: u16 = votes_for + votes_against;
+
+			// Check if the vote has passed
+			if Self::has_vote_passed(votes_total, votes_for) {
+				// Create an empty carbon footprint account
+				let mut new_account = CarbonFootprintAccountInfo {
+					documentation_ipfses: BTreeSet::<BoundedString<T::IPFSLength>>::new(),
+					carbon_footprint_balance: report.carbon_footprint_balance,
+					creation_date: T::Time::now(),
+				};
+
+				// Check to see if a carbon footprint account with the given accountID exists
+				if CarbonFootprintAccounts::<T>::contains_key(report.cf_account.clone()){
+					let old_account = CarbonFootprintAccounts::<T>::get(report.cf_account.clone()).unwrap();
+
+					// Update documentation related to the carbon footprint account
+					let mut new_documentation = old_account.documentation_ipfses;
+					new_documentation.insert(ipfs.clone());
+
+					// Update the carbon footprint account structure
+					new_account = CarbonFootprintAccountInfo {
+						documentation_ipfses: new_documentation,
+						carbon_footprint_balance: old_account.carbon_footprint_balance + report.carbon_footprint_balance,
+						creation_date: old_account.creation_date,
+					}
+				}
+
+				// Save the changes made to the carbon footprint account
+				CarbonFootprintAccounts::<T>::insert(report.cf_account.clone(), new_account);
+			} 
+
+			// Create new report
+			// Note: Only change is made to the voting_active cycle status
+			let new_report = CarbonFootprintReportInfo {
+				cf_account: report.cf_account.clone(),
+				creation_date: report.creation_date,
+				carbon_footprint_balance: report.carbon_footprint_balance,
+				votes_for: report.votes_for,
+				votes_against: report.votes_against,
+				voting_active: false,
+			};
+
+			// Save new report
+			CarbonFootprintReports::<T>::insert(ipfs, new_report);
+		}
+
+		// Update project proposal after voting ends
+		pub fn update_project_proposal(proposal: ProjectProposalInfo<AccountIdOf<T>, MomentOf<T>>, ipfs: BoundedString<T::IPFSLength>) {
+			// Get the votes that were made for the report
+			let votes_for: u16 = proposal.votes_for.len().try_into().unwrap();
+			let votes_against: u16 = proposal.votes_against.len().try_into().unwrap();
+			let votes_total: u16 = votes_for + votes_against;
+
+			// Check if the vote has passed
+			if Self::has_vote_passed(votes_total, votes_for) {
+				// Create a new project
+				let new_project = ProjectInfo {
+					documentation_ipfs: ipfs.clone(),
+					project_owner: proposal.project_owner.clone(),
+					creation_date: T::Time::now(),
+					penalty_level: 0,
+					penalty_timeout: BlockNumber::<T>::from(0u32),
+				};
+
+				// Save new project
+				Projects::<T>::insert(proposal.project_hash, new_project);
+			} 
+
+			// Create new proposal
+			// Note: Only change is made to the voting_active cycle status
+			let new_proposal = ProjectProposalInfo {
+				project_owner: proposal.project_owner.clone(),
+				creation_date: proposal.creation_date,
+				project_hash: proposal.project_hash,
+				votes_for: proposal.votes_for,
+				votes_against: proposal.votes_against,
+				voting_active: false,
+			};
+
+			// Save new proposal
+			ProjectProposals::<T>::insert(ipfs, new_proposal);
+		}
+
+		// Update carbon credit batch after voting ends
+		pub fn update_carbon_credit_batch(proposal: CarbonCreditBatchProposalInfo<MomentOf<T>, BalanceOf<T>, AccountIdOf<T>>, ipfs: BoundedString<T::IPFSLength>) {
+			// Get the votes that were made for the report
+			let votes_for: u16 = proposal.votes_for.len().try_into().unwrap();
+			let votes_against: u16 = proposal.votes_against.len().try_into().unwrap();
+			let votes_total: u16 = votes_for + votes_against;
+
+			// Check if the vote has passed
+			if Self::has_vote_passed(votes_total, votes_for) {
+				// Create a new project
+				let new_batch = CarbonCreditBatchInfo {
+					documentation_ipfs: ipfs.clone(),
+					creation_date: T::Time::now(),
+					credit_amount: proposal.credit_amount,
+					initial_credit_price: proposal.initial_credit_price,
+					status: CarbonCreditBatchStatus::Active,
+				};
+
+				// Save new carbon credit batch
+				CarbonCreditBatches::<T>::insert(proposal.project_hash, proposal.batch_hash, new_batch);
+				
+				// Create carbon credit holdings for project owner
+				let new_holdings = CarbonCreditHoldingsInfo {
+					available_amount: proposal.credit_amount.into(),
+					unavailable_amount: 0u128,
+				};
+
+				// Get project owner accountID
+				let project = Projects::<T>::get(proposal.project_hash).unwrap();
+
+				// Save project owner carbon credit holdings
+				CarbonCreditHoldings::<T>::insert(proposal.batch_hash, project.project_owner, new_holdings);
+			} 
+
+			// Create new proposal
+			// Note: Only change is made to the voting_active cycle status
+			let new_proposal = CarbonCreditBatchProposalInfo {
+				project_hash: proposal.project_hash,
+				batch_hash: proposal.batch_hash,
+				creation_date: proposal.creation_date,
+				credit_amount: proposal.credit_amount,
+				initial_credit_price: proposal.initial_credit_price,
+				votes_for: proposal.votes_for,
+				votes_against: proposal.votes_against,
+				voting_active: false,
+			};
+
+			// Save new proposal
+			CarbonCreditBatchProposals::<T>::insert(ipfs, new_proposal);
+		}
+
+		// Check if vote has passed
+		pub fn has_vote_passed(total_votes: u16, votes_for: u16) -> bool {
+			let vote_pass_ratio = VotePassRatio::<T>::get();
+		
+			if vote_pass_ratio.upper_limit_part == 0 && votes_for >= total_votes - votes_for + 1 {
+				return true;
+			}
+
+			if vote_pass_ratio.upper_limit_part == vote_pass_ratio.proportion_part && votes_for == total_votes {
+				return true;
+			}
+
+			let needed_votes = (vote_pass_ratio.proportion_part * total_votes) / vote_pass_ratio.upper_limit_part;
+
+			if votes_for >= needed_votes {
+				return true;
+			}
+
+			return false;
 		}
 	}
 }
