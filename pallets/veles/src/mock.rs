@@ -13,6 +13,7 @@ use sp_runtime::{
 pub use crate::*;
 #[allow(unused_imports)]
 pub use common::*;
+use frame_support::PalletId;
 pub use pallet_veles::PenaltyLevelConfig;
 pub use sp_core::H256;
 pub use sp_std::collections::btree_set::BTreeSet;
@@ -24,12 +25,33 @@ pub type AccountId = AccountId32;
 pub type Balance = u128;
 
 // Helper functions
+pub fn pallet_id() -> AccountId {
+	let pallet_id = PalletId(*b"velesplt");
+
+	pallet_id.into_account_truncating()
+}
+
 pub fn alice() -> AccountId {
 	AccountId::from([1u8; 32])
 }
 
 pub fn bob() -> AccountId {
 	AccountId::from([2u8; 32])
+}
+
+pub fn charlie() -> AccountId {
+	AccountId::from([3u8; 32])
+}
+
+pub fn generate_hash(user: AccountId) -> H256 {
+	let nonce = frame_system::Pallet::<Test>::account_nonce(&user);
+	let now = <mock::Test as pallet::Config>::Time::now();
+
+	let encoded: [u8; 32] = (&user, nonce, now).using_encoded(blake2_256);
+
+	let hash = H256::from(encoded);
+
+	hash
 }
 
 // Configure a mock runtime to test the pallet.
@@ -138,7 +160,8 @@ impl pallet_veles::Config for Test {
 pub fn new_test_ext() -> sp_io::TestExternalities {
 	let mut storage = frame_system::GenesisConfig::<Test>::default().build_storage().unwrap();
 
-	let endowed_accounts: Vec<(AccountId, Balance)> = vec![(alice(), 1), (bob(), 100)];
+	let endowed_accounts: Vec<(AccountId, Balance)> =
+		vec![(alice(), 1), (bob(), 100), (charlie(), 5000)];
 
 	pallet_balances::GenesisConfig::<Test> {
 		balances: endowed_accounts.iter().map(|(acc, balance)| (acc.clone(), *balance)).collect(),
