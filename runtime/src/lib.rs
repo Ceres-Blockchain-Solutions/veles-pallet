@@ -260,30 +260,20 @@ impl pallet_sudo::Config for Runtime {
 // Parameters for the Veles pallet
 parameter_types! {
 	pub const IPFSLength: u32 = 64;
-	pub const CarboCreditDecimal: u8 = 4;
 	pub const BlockFinalizationTime: u32 = 6;
 	pub OffchainWorkerTxPriority: TransactionPriority =
 		Perbill::from_percent(10) * TransactionPriority::max_value();
 	pub OffchainWorkerTxLongevity: TransactionLongevity = 5;
-	pub const PenaltyLevelsConfiguration: [PenaltyLevelConfig; 5] = [
-		PenaltyLevelConfig { level: 0, base: 1 },
-		PenaltyLevelConfig { level: 1, base: 2 },
-		PenaltyLevelConfig { level: 2, base: 3 },
-		PenaltyLevelConfig { level: 3, base: 4 },
-		PenaltyLevelConfig { level: 4, base: 5 }, // TODO base into Balance
-	];
 }
 
 /// Configure the Veles pallet
 impl pallet_veles::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type IPFSLength = IPFSLength;
-	type CarboCreditDecimal = CarboCreditDecimal;
 	type BlockFinalizationTime = BlockFinalizationTime;
 	type Time = Timestamp;
 	type UnsignedPriority = OffchainWorkerTxPriority;
 	type UnsignedLongevity = OffchainWorkerTxLongevity;
-	type PenaltyLevelsConfiguration = PenaltyLevelsConfiguration;
 	type Currency = Balances;
 }
 

@@ -14,7 +14,6 @@ pub use crate::*;
 #[allow(unused_imports)]
 pub use common::*;
 use frame_support::PalletId;
-pub use pallet_veles::PenaltyLevelConfig;
 pub use sp_core::H256;
 pub use sp_std::collections::btree_set::BTreeSet;
 
@@ -124,15 +123,7 @@ impl pallet_balances::Config for Test {
 
 parameter_types! {
 	pub const IPFSLength: u32 = 64;
-	pub const CarboCreditDecimal: u8 = 4;
 	pub const BlockFinalizationTime: u32 = 6;
-	pub const PenaltyLevelsConfiguration: [PenaltyLevelConfig; 5] = [
-		PenaltyLevelConfig { level: 0, base: 1 },
-		PenaltyLevelConfig { level: 1, base: 2 },
-		PenaltyLevelConfig { level: 2, base: 3 },
-		PenaltyLevelConfig { level: 3, base: 4 },
-		PenaltyLevelConfig { level: 4, base: 5 }, // TODO base into Balance
-	];
 	pub const MinimumPeriod: u64 = 5;
 }
 
@@ -147,9 +138,7 @@ impl pallet_timestamp::Config for Test {
 impl pallet_veles::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
 	type IPFSLength = IPFSLength;
-	type CarboCreditDecimal = CarboCreditDecimal;
 	type Time = Timestamp;
-	type PenaltyLevelsConfiguration = PenaltyLevelsConfiguration;
 	type UnsignedPriority = ConstU64<100>;
 	type UnsignedLongevity = ConstU64<100>;
 	type BlockFinalizationTime = BlockFinalizationTime;
