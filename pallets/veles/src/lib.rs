@@ -34,11 +34,13 @@ pub struct ProjectValidatorOrProjectOwnerInfo<IPFSLength: Get<u32>, BlockNumber>
 #[derive(Encode, Decode, Default, PartialEq, Eq, scale_info::TypeInfo)]
 #[cfg_attr(feature = "std", derive(Debug))]
 #[scale_info(skip_type_params(IPFSLength))]
-pub struct CarbonFootprintAccountInfo<MomentOf, IPFSLength: Get<u32>> {
+pub struct CarbonFootprintAccountInfo<MomentOf, IPFSLength: Get<u32>, BalanceOf> {
 	// IPFS links to CFA documentation
 	documentation_ipfses: BTreeSet<BoundedString<IPFSLength>>,
-	// Carbon footprint balance
-	carbon_footprint_balance: i128,
+	// Carbon footprint suficit
+	carbon_footprint_suficit: BalanceOf,
+	// Carbon footprint deficit
+	carbon_footprint_deficit: BalanceOf,
 	// Creation date
 	creation_date: MomentOf,
 }
@@ -46,13 +48,15 @@ pub struct CarbonFootprintAccountInfo<MomentOf, IPFSLength: Get<u32>> {
 // Carbon Footprint report data structure
 #[derive(Encode, Decode, Default, PartialEq, Eq, scale_info::TypeInfo)]
 #[cfg_attr(feature = "std", derive(Debug))]
-pub struct CarbonFootprintReportInfo<AccountIdOf, MomentOf> {
+pub struct CarbonFootprintReportInfo<AccountIdOf, MomentOf, BalanceOf> {
 	// Carbon footprint account
 	cf_account: AccountIdOf,
 	// Creation date
 	creation_date: MomentOf,
-	// Carbon footprint balance (aka Carbon footprint)
-	carbon_footprint_balance: i128,
+	// Carbon footprint suficit
+	carbon_footprint_suficit: BalanceOf,
+	// Carbon footprint deficit
+	carbon_footprint_deficit: BalanceOf,
 	// Votes for
 	votes_for: BTreeSet<AccountIdOf>,
 	// Votes against
@@ -91,8 +95,8 @@ pub struct CarbonCreditBatchProposalInfo<MomentOf, BalanceOf, AccountIdOf> {
 	creation_date: MomentOf,
 	// Carbon credit amount
 	credit_amount: BalanceOf,
-	// Initial carbon credit price
-	initial_credit_price: BalanceOf,
+	// Penalty repay price (per credit)
+	penalty_repay_price: BalanceOf,
 	// Votes for
 	votes_for: BTreeSet<AccountIdOf>,
 	// Votes against
@@ -126,12 +130,14 @@ pub struct CarbonCreditBatchInfo<IPFSLength: Get<u32>, MomentOf, BalanceOf, Carb
 {
 	// IPFS link to CFA documentation
 	documentation_ipfs: BoundedString<IPFSLength>,
+	// Project hash
+	project_hash: H256,
 	// Creation date
 	creation_date: MomentOf,
 	// Carbon credit amount
 	credit_amount: BalanceOf,
-	// Initial carbon credit price
-	initial_credit_price: BalanceOf,
+	// Penalty repay price (per credit)
+	penalty_repay_price: BalanceOf,
 	// Batch status
 	status: CarbonCreditBatchStatus,
 }
@@ -199,6 +205,7 @@ pub enum VoteType {
 	CarbonFootprintReportVote,
 	ProjectProposalVote,
 	CarbonCreditBatchVote,
+	ComplaintVote,
 }
 
 // Carbon credit batch status
@@ -217,11 +224,11 @@ pub enum FeeType {
 	TraderAccountFee,           // Trader acccount registration fee
 	ProjectValidatorAccountFee, // Project validator account registration fee
 	ProjectOwnerAccountFee,     // Project owner account registration fee
-	CarbonCreditReportFee,      // Carbon credit report submition fee
+	CarbonFootprintReportFee,   // Carbon footprint report submition fee
 	ProjectProposalFee,         // Project proposal fee
 	CarbonCreditBatchFee,       // Carbon credit batch proposition fee
 	VotingFee,                  // Voting fee
-	ClaimFee,                   // Claim proposal fee
+	ComplaintFee,               // Complaint proposal fee
 }
 
 // Fee values
@@ -242,8 +249,8 @@ pub struct FeeValues<BalanceOf> {
 	carbon_credit_batch_fee: BalanceOf,
 	// Voting fee
 	voting_fee: BalanceOf,
-	// Claim proposal fee
-	claim_fee: BalanceOf,
+	// Complaint proposal fee
+	complaint_fee: BalanceOf,
 }
 
 // Time type
@@ -266,6 +273,52 @@ pub struct TimeValues<BlockNumber> {
 	penalty_timeout: BlockNumber,
 	voting_timeout: BlockNumber,
 	sales_timeout: BlockNumber,
+}
+
+// Complaint type
+#[derive(Encode, Decode, PartialEq, Eq, scale_info::TypeInfo, Clone)]
+#[cfg_attr(feature = "std", derive(Debug))]
+pub enum ComplaintType {
+	ProjectComplaint,           // Complaint made for a project
+	CarbonCreditBatchComplaint, // Complaint made for a carbon credit batch
+	ValidatorComplaint,         // Complaint made for a validator
+	ProjectOwnerComplaint,      // Complaint made for a project owner
+}
+
+// Complaint info structure (for AccountID based entities)
+#[derive(Encode, Decode, PartialEq, Eq, scale_info::TypeInfo, Clone)]
+#[cfg_attr(feature = "std", derive(Debug))]
+pub struct ComplaintAccountBasedInfo<AccountIdOf, MomentOf> {
+	complaint_proposer: AccountIdOf,
+	complaint_type: ComplaintType,
+	complaint_for: AccountIdOf,
+	creation_date: MomentOf,
+	votes_for: BTreeSet<AccountIdOf>,
+	votes_against: BTreeSet<AccountIdOf>,
+	complaint_active: bool,
+}
+
+// Complaint info structure (for hash based entities)
+#[derive(Encode, Decode, PartialEq, Eq, scale_info::TypeInfo, Clone)]
+#[cfg_attr(feature = "std", derive(Debug))]
+pub struct ComplaintHashBasedInfo<AccountIdOf, MomentOf> {
+	complaint_proposer: AccountIdOf,
+	complaint_type: ComplaintType,
+	complaint_for: H256,
+	creation_date: MomentOf,
+	votes_for: BTreeSet<AccountIdOf>,
+	votes_against: BTreeSet<AccountIdOf>,
+	complaint_active: bool,
+}
+
+// Carbon credit retirement info structure (only for CFAs)
+#[derive(Encode, Decode, Default, PartialEq, Eq, scale_info::TypeInfo, Clone)]
+#[cfg_attr(feature = "std", derive(Debug))]
+pub struct CarbonCreditRetirementInfo<AccountIdOf, BalanceOf, MomentOf> {
+	carbon_footprint_account: AccountIdOf,
+	batch_hash: H256,
+	credit_amount: BalanceOf,
+	retirement_date: MomentOf,
 }
 
 #[frame_support::pallet]
@@ -303,7 +356,7 @@ pub mod pallet {
 	}
 
 	/// Pallet types and constants
-	type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
+	pub type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
 	pub type MomentOf<T> = <<T as Config>::Time as Time>::Moment;
 	pub type BlockNumber<T> = BlockNumberFor<T>;
 	pub type BalanceOf<T> = <<T as Config>::Currency as Currency<AccountIdOf<T>>>::Balance;
@@ -336,7 +389,7 @@ pub mod pallet {
 			project_proposal_fee: BalanceOf::<T>::from(100u32),
 			carbon_credit_batch_fee: BalanceOf::<T>::from(50u32),
 			voting_fee: BalanceOf::<T>::from(100u32),
-			claim_fee: BalanceOf::<T>::from(100u32),
+			complaint_fee: BalanceOf::<T>::from(100u32),
 		};
 
 		fee_values
@@ -373,8 +426,8 @@ pub mod pallet {
 	// a 100% of votes in order to made a passing/non passing decision
 	#[pallet::type_value]
 	pub fn DefaultForVotePassRatio<T: Config>() -> ProportionStructure {
-		let mut proportion_part: u16 = 1;
-		let upper_limit_part: u16 = 6;
+		let mut proportion_part: u16 = 2;
+		let upper_limit_part: u16 = 3;
 
 		if upper_limit_part == 0 {
 			proportion_part = 0;
@@ -419,7 +472,7 @@ pub mod pallet {
 		_,
 		Identity,
 		AccountIdOf<T>,
-		CarbonFootprintAccountInfo<MomentOf<T>, T::IPFSLength>,
+		CarbonFootprintAccountInfo<MomentOf<T>, T::IPFSLength, BalanceOf<T>>,
 		OptionQuery,
 	>;
 
@@ -429,10 +482,10 @@ pub mod pallet {
 	pub type TraderAccounts<T: Config> =
 		StorageValue<_, BTreeSet<AccountIdOf<T>>, ValueQuery, DefaultForTraderAccounts<T>>;
 
-	// Project Validator accounts
+	// Validator accounts
 	#[pallet::storage]
-	#[pallet::getter(fn project_validators)]
-	pub(super) type ProjectValidators<T: Config> = StorageMap<
+	#[pallet::getter(fn validators)]
+	pub(super) type Validators<T: Config> = StorageMap<
 		_,
 		Identity,
 		AccountIdOf<T>,
@@ -465,11 +518,9 @@ pub mod pallet {
 	// Carbon credit batches
 	#[pallet::storage]
 	#[pallet::getter(fn carbon_credit_batches)]
-	pub(super) type CarbonCreditBatches<T: Config> = StorageDoubleMap<
+	pub(super) type CarbonCreditBatches<T: Config> = StorageMap<
 		_,
-		Blake2_128Concat,
-		H256,
-		Blake2_128Concat,
+		Identity,
 		H256,
 		CarbonCreditBatchInfo<T::IPFSLength, MomentOf<T>, BalanceOf<T>, CarbonCreditBatchStatus>,
 		OptionQuery,
@@ -496,6 +547,28 @@ pub mod pallet {
 		Identity,
 		H256,
 		CarbonCreditSaleOrderInfo<BalanceOf<T>, AccountIdOf<T>, BlockNumber<T>>,
+		OptionQuery,
+	>;
+
+	// Complaints (for AccountID based entities)
+	#[pallet::storage]
+	#[pallet::getter(fn complaints_for_accounts)]
+	pub(super) type ComplaintsForAccounts<T: Config> = StorageMap<
+		_,
+		Identity,
+		BoundedString<T::IPFSLength>,
+		ComplaintAccountBasedInfo<AccountIdOf<T>, MomentOf<T>>,
+		OptionQuery,
+	>;
+
+	// Complaints (for hash based entities)
+	#[pallet::storage]
+	#[pallet::getter(fn complaints_for_hashes)]
+	pub(super) type ComplaintsForHashes<T: Config> = StorageMap<
+		_,
+		Identity,
+		BoundedString<T::IPFSLength>,
+		ComplaintHashBasedInfo<AccountIdOf<T>, MomentOf<T>>,
 		OptionQuery,
 	>;
 
@@ -528,6 +601,17 @@ pub mod pallet {
 	pub(super) type SaleOrderTimeouts<T: Config> =
 		StorageMap<_, Identity, BlockNumber<T>, BTreeSet<H256>, OptionQuery>;
 
+	// Complaint timeouts
+	#[pallet::storage]
+	#[pallet::getter(fn complaint_timeouts)]
+	pub(super) type ComplaintTimeouts<T: Config> = StorageMap<
+		_,
+		Identity,
+		BlockNumber<T>,
+		BTreeSet<BoundedString<T::IPFSLength>>,
+		OptionQuery,
+	>;
+
 	// Carbon footprint reports
 	#[pallet::storage]
 	#[pallet::getter(fn carbon_footprint_reports)]
@@ -535,7 +619,7 @@ pub mod pallet {
 		_,
 		Identity,
 		BoundedString<T::IPFSLength>,
-		CarbonFootprintReportInfo<AccountIdOf<T>, MomentOf<T>>,
+		CarbonFootprintReportInfo<AccountIdOf<T>, MomentOf<T>, BalanceOf<T>>,
 		OptionQuery,
 	>;
 
@@ -560,6 +644,18 @@ pub mod pallet {
 		CarbonCreditBatchProposalInfo<MomentOf<T>, BalanceOf<T>, AccountIdOf<T>>,
 		OptionQuery,
 	>;
+
+	// Carbon credit retirements
+	#[pallet::storage]
+	#[pallet::getter(fn carbon_credit_retirements)]
+	pub(super) type CarbonCreditRetirements<T: Config> = StorageMap<
+		_,
+		Identity,
+		H256,
+		CarbonCreditRetirementInfo<AccountIdOf<T>, BalanceOf<T>, MomentOf<T>>,
+		OptionQuery,
+	>;
+	
 
 	#[pallet::event]
 	#[pallet::generate_deposit(pub (super) fn deposit_event)]
@@ -590,6 +686,17 @@ pub mod pallet {
 		CarbonCreditSaleOrderCompleted(AccountIdOf<T>, H256),
 		/// Carbon Credit Sale Order Closed
 		CarbonCreditSaleOrderClosed(AccountIdOf<T>, H256),
+		// Account Complaint Opened
+		AccountComplaintOpened(
+			AccountIdOf<T>,
+			AccountIdOf<T>,
+			ComplaintType,
+			BoundedString<T::IPFSLength>,
+		),
+		// Hash Complaint Opened
+		HashComplaintOpened(AccountIdOf<T>, H256, ComplaintType, BoundedString<T::IPFSLength>),
+		/// Carbon Credits Have Been Retired
+		CarbonCreditsHaveBeenRetired(AccountIdOf<T>, H256, BalanceOf<T>),
 	}
 
 	#[pallet::error]
@@ -617,7 +724,9 @@ pub mod pallet {
 		/// Project Proposal not found
 		ProjectProposalNotFound,
 		/// Carbon credit batch proposal not found
-		CCBProposalNotFound,
+		CarbonCreditBatchProposalNotFound,
+		/// Complaint not found
+		ComplaintNotFound,
 		/// Wrong vote type
 		WrongVoteType,
 		/// Project doesn't exist
@@ -640,8 +749,28 @@ pub mod pallet {
 		CarbonCreditSaleOrderDoesntExist,
 		/// The buyer can't buy his own tokens
 		BuyerCantBuyHisOwnTokens,
-		/// User didn't create the sell order
-		UserDidntCreateTheSellOrder,
+		/// User didn't create the sale order
+		UserDidntCreateTheSaleOrder,
+		/// User is not a registered validator
+		UserIsNotARegisteredValidator,
+		/// Unregistered Account ID
+		UnregisteredAccountId,
+		/// Unregistered Hash
+		UnregisteredHash,
+		/// Invalid Penalty Price Value
+		InvalidPenaltyPriceValue,
+		/// Invalid Carbon Footprint Values
+		InvalidCarbonFootprintValues,
+		/// Invalid Carbon Credit Amount
+		InvalidCarbonCreditAmount,
+		/// Carbon Credit Holding Don't Exist
+		CarbonCreditHoldingsDontExist,
+		/// Sale Order Is Not Active
+		SaleOrderIsNotActive,
+		/// Invalid Complaint Type
+		InvalidComplaintType,
+		/// User is not of a carbon footprint account type
+		UserIsNotOfACarbonFootprintAccountType,
 	}
 
 	#[pallet::call]
@@ -804,7 +933,8 @@ pub mod pallet {
 					pallet_fees =
 						FeeValues { project_owner_account_fee: new_fee_value, ..pallet_fees };
 				},
-				FeeType::CarbonCreditReportFee => {
+				// TODO: Change name to Carbon footpring report
+				FeeType::CarbonFootprintReportFee => {
 					ensure!(
 						new_fee_value != pallet_fees.carbon_footprint_report_fee,
 						Error::<T>::UpdatingToCurrentValue,
@@ -838,13 +968,13 @@ pub mod pallet {
 
 					pallet_fees = FeeValues { voting_fee: new_fee_value, ..pallet_fees };
 				},
-				FeeType::ClaimFee => {
+				FeeType::ComplaintFee => {
 					ensure!(
-						new_fee_value != pallet_fees.claim_fee,
+						new_fee_value != pallet_fees.complaint_fee,
 						Error::<T>::UpdatingToCurrentValue,
 					);
 
-					pallet_fees = FeeValues { claim_fee: new_fee_value, ..pallet_fees };
+					pallet_fees = FeeValues { complaint_fee: new_fee_value, ..pallet_fees };
 				},
 			}
 
@@ -884,8 +1014,8 @@ pub mod pallet {
 
 			// Transfer funds
 			T::Currency::transfer(
-				&Self::account_id(),
 				&user,
+				&Self::account_id(),
 				PalletFeeValues::<T>::get().trader_account_fee,
 				ExistenceRequirement::KeepAlive,
 			)?;
@@ -934,12 +1064,12 @@ pub mod pallet {
 					penalty_level: 0,
 					penalty_timeout: BlockNumber::<T>::from(0u32),
 				};
-			ProjectValidators::<T>::insert(user.clone(), validator_info);
+			Validators::<T>::insert(user.clone(), validator_info);
 
 			// Transfer funds
 			T::Currency::transfer(
-				&Self::account_id(),
 				&user,
+				&Self::account_id(),
 				PalletFeeValues::<T>::get().project_validator_account_fee,
 				ExistenceRequirement::KeepAlive,
 			)?;
@@ -995,8 +1125,8 @@ pub mod pallet {
 
 			// Transfer funds
 			T::Currency::transfer(
-				&Self::account_id(),
 				&user,
+				&Self::account_id(),
 				PalletFeeValues::<T>::get().project_owner_account_fee,
 				ExistenceRequirement::KeepAlive,
 			)?;
@@ -1016,25 +1146,29 @@ pub mod pallet {
 		pub fn submit_carbon_footprint_report(
 			origin: OriginFor<T>,
 			ipfs: BoundedString<T::IPFSLength>,
-			carbon_footprint_balance: i128,
+			carbon_footprint_suficit: BalanceOf<T>,
+			carbon_footprint_deficit: BalanceOf<T>,
 		) -> DispatchResultWithPostInfo {
 			let user = ensure_signed(origin)?;
+
+			// Check if user has submitted valid report values
+			ensure!((carbon_footprint_suficit == BalanceOf::<T>::from(0u32)) ^ (carbon_footprint_deficit == BalanceOf::<T>::from(0u32)), Error::<T>::InvalidCarbonFootprintValues);
 
 			// Check if the account is a CFAccount
 			// Note: An accountID value can be already in use for as a CF account
 			// 		 But it can also be available if the user is a new user of the pallet
 			ensure!(Self::is_eligible_for_cfa(user.clone()), Error::<T>::AccountIdAlreadyInUse);
 
-			// Check if the documentation (IPFS link) has been used previously
-			ensure!(
-				Self::is_ipfs_available(ipfs.clone()),
-				Error::<T>::DocumentationWasUsedPreviously
-			);
-
 			// Check if the user has already submited a CF report
 			ensure!(
 				!Self::is_trying_to_register_as_cfa(user.clone()),
 				Error::<T>::CarbonFootprintReportAlreadySubmitted
+			);
+
+			// Check if the documentation (IPFS link) has been used previously
+			ensure!(
+				Self::is_ipfs_available(ipfs.clone()),
+				Error::<T>::DocumentationWasUsedPreviously
 			);
 
 			// Check if caller has sufficient funds
@@ -1051,7 +1185,8 @@ pub mod pallet {
 			let report_info = CarbonFootprintReportInfo {
 				cf_account: user.clone(),
 				creation_date,
-				carbon_footprint_balance,
+				carbon_footprint_deficit,
+				carbon_footprint_suficit,
 				votes_for: BTreeSet::<AccountIdOf<T>>::new(),
 				votes_against: BTreeSet::<AccountIdOf<T>>::new(),
 				voting_active: true,
@@ -1076,8 +1211,8 @@ pub mod pallet {
 
 			// Transfer funds
 			T::Currency::transfer(
-				&Self::account_id(),
 				&user,
+				&Self::account_id(),
 				PalletFeeValues::<T>::get().carbon_footprint_report_fee,
 				ExistenceRequirement::KeepAlive,
 			)?;
@@ -1099,8 +1234,8 @@ pub mod pallet {
 		) -> DispatchResultWithPostInfo {
 			let user = ensure_signed(origin)?;
 
-			// Check if caller is Project Validator account
-			ensure!(ProjectValidators::<T>::contains_key(user.clone()), Error::<T>::Unauthorized);
+			// Check if caller is Validator account
+			ensure!(Validators::<T>::contains_key(user.clone()), Error::<T>::Unauthorized);
 
 			// Check if caller has sufficient funds
 			ensure!(
@@ -1157,7 +1292,7 @@ pub mod pallet {
 				VoteType::CarbonCreditBatchVote => {
 					// Get carbon credit batch proposal info or return error if it does not exist
 					let mut batch = CarbonCreditBatchProposals::<T>::get(ipfs.clone())
-						.ok_or(Error::<T>::CCBProposalNotFound)?;
+						.ok_or(Error::<T>::CarbonCreditBatchProposalNotFound)?;
 
 					// Check if the voting cycle is over
 					ensure!(batch.voting_active, Error::<T>::VotingCycleIsOver);
@@ -1176,12 +1311,64 @@ pub mod pallet {
 
 					CarbonCreditBatchProposals::<T>::insert(ipfs.clone(), batch);
 				},
+				VoteType::ComplaintVote => {
+					let mut complaint_exists = false;
+
+					// Get complaint info or return error if it does not exits
+					if ComplaintsForAccounts::<T>::contains_key(ipfs.clone()) {
+						let mut complaint = ComplaintsForAccounts::<T>::get(ipfs.clone()).unwrap();
+
+						complaint_exists = true;
+
+						// Check if the voting cycle is over
+						ensure!(complaint.complaint_active, Error::<T>::VotingCycleIsOver);
+
+						// Check if vote already exists
+						ensure!(
+							!complaint.votes_for.contains(&user)
+								&& !complaint.votes_against.contains(&user),
+							Error::<T>::VoteAlreadySubmitted
+						);
+
+						if vote {
+							complaint.votes_for.insert(user.clone());
+						} else {
+							complaint.votes_against.insert(user.clone());
+						};
+
+						ComplaintsForAccounts::<T>::insert(ipfs.clone(), complaint);
+					} else if ComplaintsForHashes::<T>::contains_key(ipfs.clone()) {
+						let mut complaint = ComplaintsForHashes::<T>::get(ipfs.clone()).unwrap();
+
+						complaint_exists = true;
+
+						// Check if the voting cycle is over
+						ensure!(complaint.complaint_active, Error::<T>::VotingCycleIsOver);
+
+						// Check if vote already exists
+						ensure!(
+							!complaint.votes_for.contains(&user)
+								&& !complaint.votes_against.contains(&user),
+							Error::<T>::VoteAlreadySubmitted
+						);
+
+						if vote {
+							complaint.votes_for.insert(user.clone());
+						} else {
+							complaint.votes_against.insert(user.clone());
+						};
+
+						ComplaintsForHashes::<T>::insert(ipfs.clone(), complaint);
+					}
+
+					ensure!(complaint_exists, Error::<T>::ComplaintNotFound);
+				},
 			}
 
 			// Transfer funds
 			T::Currency::transfer(
-				&Self::account_id(),
 				&user,
+				&Self::account_id(),
 				PalletFeeValues::<T>::get().voting_fee,
 				ExistenceRequirement::KeepAlive,
 			)?;
@@ -1257,8 +1444,8 @@ pub mod pallet {
 
 			// Transfer funds
 			T::Currency::transfer(
-				&Self::account_id(),
 				&user,
+				&Self::account_id(),
 				PalletFeeValues::<T>::get().project_proposal_fee,
 				ExistenceRequirement::KeepAlive,
 			)?;
@@ -1276,7 +1463,7 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			project_hash: H256,
 			credit_amount: BalanceOf<T>,
-			initial_credit_price: BalanceOf<T>,
+			penalty_repay_price: BalanceOf<T>,
 			ipfs: BoundedString<T::IPFSLength>,
 		) -> DispatchResultWithPostInfo {
 			let user = ensure_signed(origin)?;
@@ -1284,12 +1471,14 @@ pub mod pallet {
 			// Check if caller is a Project Owner account
 			ensure!(ProjectOwners::<T>::contains_key(user.clone()), Error::<T>::Unauthorized);
 
+			// Check if the penalty repay price is 0
+			ensure!(penalty_repay_price != BalanceOf::<T>::from(0u32), Error::<T>::InvalidPenaltyPriceValue);
+
 			// Check if project exists
 			let project = Projects::<T>::get(project_hash).ok_or(Error::<T>::ProjectDoesntExist)?;
 
 			// Check if the owner owns the mentioned project
-			let project_proposal = ProjectProposals::<T>::get(project.documentation_ipfs).unwrap();
-			ensure!(project_proposal.project_owner == user, Error::<T>::Unauthorized);
+			ensure!(project.project_owner == user, Error::<T>::Unauthorized);
 
 			// Check if the documentation (IPFS link) has been used previously
 			ensure!(
@@ -1316,7 +1505,7 @@ pub mod pallet {
 				batch_hash,
 				creation_date,
 				credit_amount,
-				initial_credit_price,
+				penalty_repay_price,
 				votes_for: BTreeSet::<AccountIdOf<T>>::new(),
 				votes_against: BTreeSet::<AccountIdOf<T>>::new(),
 				voting_active: true,
@@ -1341,8 +1530,8 @@ pub mod pallet {
 
 			// Transfer funds
 			T::Currency::transfer(
-				&Self::account_id(),
 				&user,
+				&Self::account_id(),
 				PalletFeeValues::<T>::get().carbon_credit_batch_fee,
 				ExistenceRequirement::KeepAlive,
 			)?;
@@ -1370,15 +1559,22 @@ pub mod pallet {
 				Error::<T>::UserIsNotEligibleForCarbonCreditTransactions,
 			);
 
+			// Check if user put a nonnegative number for the credit amount
+			ensure!(credit_amount > BalanceOf::<T>::from(0u32), Error::<T>::InvalidCarbonCreditAmount);
+
 			// Check if carbon credit batch exists
-			let carbon_credit_batch = Self::get_batch(batch_hash)
-				.expect(Error::<T>::CarbonCreditBatchDoesNotExist.into());
+			ensure!(CarbonCreditBatches::<T>::contains_key(batch_hash), Error::<T>::CarbonCreditBatchDoesNotExist);
+
+			let carbon_credit_batch = CarbonCreditBatches::<T>::get(batch_hash).unwrap();
 
 			// Check if the carbon credit batch is active
 			ensure!(
 				carbon_credit_batch.status == CarbonCreditBatchStatus::Active,
 				Error::<T>::CarbonCreditBatchIsNotActive,
 			);
+
+			// Check if the user holding exist
+			ensure!(CarbonCreditHoldings::<T>::contains_key(batch_hash, seller.clone()), Error::<T>::CarbonCreditHoldingsDontExist);
 
 			// Check if user has enough available credits
 			let mut seller_holdings =
@@ -1468,9 +1664,9 @@ pub mod pallet {
 			ensure!(buyer != sale_order.seller, Error::<T>::BuyerCantBuyHisOwnTokens);
 
 			// Check if carbon credit batch exists
-			// Note: This will always return a carbon credit batch since a sale order would
-			//		 not exits without one
-			let carbon_credit_batch = Self::get_batch(sale_order.batch_hash).unwrap();
+			ensure!(CarbonCreditBatches::<T>::contains_key(sale_order.batch_hash), Error::<T>::CarbonCreditBatchDoesNotExist);
+
+			let carbon_credit_batch = CarbonCreditBatches::<T>::get(sale_order.batch_hash).unwrap();
 
 			// Check if the carbon credit batch is active
 			ensure!(
@@ -1492,8 +1688,8 @@ pub mod pallet {
 
 			// Transfer funds
 			T::Currency::transfer(
-				&sale_order.seller,
 				&buyer,
+				&sale_order.seller,
 				amount_to_pay,
 				ExistenceRequirement::KeepAlive,
 			)?;
@@ -1557,7 +1753,11 @@ pub mod pallet {
 
 			sale_timeouts.remove(&sale_hash);
 
-			SaleOrderTimeouts::<T>::insert(sale_order.sale_timeout, sale_timeouts);
+			if sale_timeouts.len() == 0 {
+				SaleOrderTimeouts::<T>::remove(sale_order.sale_timeout);
+			} else {
+				SaleOrderTimeouts::<T>::insert(sale_order.sale_timeout, sale_timeouts);
+			}			
 
 			// Deposit event
 			Self::deposit_event(Event::CarbonCreditSaleOrderCompleted(buyer, sale_hash));
@@ -1588,19 +1788,14 @@ pub mod pallet {
 
 			let mut sale_order = CarbonCreditSaleOrders::<T>::get(sale_hash).unwrap();
 
+			// Check if the sale order is still active
+			ensure!(sale_order.sale_active, Error::<T>::SaleOrderIsNotActive);
+
 			// Check if the seller created the sale order
-			ensure!(seller == sale_order.seller, Error::<T>::UserDidntCreateTheSellOrder);
+			ensure!(seller == sale_order.seller, Error::<T>::UserDidntCreateTheSaleOrder);
 
 			// Check if carbon credit batch exists
-			// Note: This will always return a carbon credit batch since a sale order would
-			//		 not exits without one
-			let carbon_credit_batch = Self::get_batch(sale_order.batch_hash).unwrap();
-
-			// Check if the carbon credit batch is active
-			ensure!(
-				carbon_credit_batch.status == CarbonCreditBatchStatus::Active,
-				Error::<T>::CarbonCreditBatchIsNotActive,
-			);
+			ensure!(CarbonCreditBatches::<T>::contains_key(sale_order.batch_hash), Error::<T>::CarbonCreditBatchDoesNotExist);
 
 			// Update seller holdings
 			let mut seller_holdings =
@@ -1624,12 +1819,307 @@ pub mod pallet {
 
 			// Remove sale order timeout
 			let mut sale_timeouts = SaleOrderTimeouts::<T>::get(sale_order.sale_timeout).unwrap();
+			
 			sale_timeouts.remove(&sale_hash);
 
-			SaleOrderTimeouts::<T>::insert(sale_order.sale_timeout, sale_timeouts);
+			if sale_timeouts.len() == 0 {
+				SaleOrderTimeouts::<T>::remove(sale_order.sale_timeout);
+			} else {
+				SaleOrderTimeouts::<T>::insert(sale_order.sale_timeout, sale_timeouts);
+			}
 
 			// Deposit event
 			Self::deposit_event(Event::CarbonCreditSaleOrderClosed(seller, sale_hash));
+
+			Ok(().into())
+		}
+
+		// Open complaint (for AccountId entity)
+		#[pallet::call_index(13)]
+		#[pallet::weight(0)]
+		pub fn open_account_complaint(
+			origin: OriginFor<T>,
+			documentation_ipfs: BoundedString<T::IPFSLength>,
+			complaint_for: AccountIdOf<T>,
+			complaint_type: ComplaintType,
+		) -> DispatchResultWithPostInfo {
+			let validator = ensure_signed(origin)?;
+
+			// Check if the complaint proposer is a registered validator
+			ensure!(
+				Validators::<T>::contains_key(validator.clone()),
+				Error::<T>::UserIsNotARegisteredValidator
+			);
+
+			// Check if the given IPFS link is currently in use
+			ensure!(
+				Self::is_ipfs_available(documentation_ipfs.clone()),
+				Error::<T>::DocumentationWasUsedPreviously
+			);
+
+			// TODO: Implement penalty tax
+
+			// Check if the proposer has enough credits
+			ensure!(
+				PalletFeeValues::<T>::get().complaint_fee
+					<= T::Currency::free_balance(&validator.clone()),
+				Error::<T>::InsufficientFunds
+			);
+
+			// Check if the given accountId is registered
+			match complaint_type {
+				ComplaintType::ValidatorComplaint => {
+					ensure!(
+						Validators::<T>::contains_key(complaint_for.clone()),
+						Error::<T>::UnregisteredAccountId
+					);
+				},
+				ComplaintType::ProjectOwnerComplaint => {
+					ensure!(
+						ProjectOwners::<T>::contains_key(complaint_for.clone()),
+						Error::<T>::UnregisteredAccountId
+					);
+
+					// Freeze all carbon credit batches for given owner
+					Self::freeze_all_owner_batches(complaint_for.clone());
+				},
+				_ => { ensure!(false, Error::<T>::InvalidComplaintType); },
+			}
+
+			// Save complaint
+			let complaint = ComplaintAccountBasedInfo {
+				complaint_for: complaint_for.clone(),
+				complaint_type: complaint_type.clone(),
+				complaint_proposer: validator.clone(),
+				creation_date: T::Time::now(),
+				votes_for: BTreeSet::<AccountIdOf<T>>::new(),
+				votes_against: BTreeSet::<AccountIdOf<T>>::new(),
+				complaint_active: true,
+			};
+
+			ComplaintsForAccounts::<T>::insert(documentation_ipfs.clone(), complaint);
+
+			// Save complaint timeout event
+			let current_block = frame_system::Pallet::<T>::block_number();
+			let timeout_block = current_block + PalletTimeValues::<T>::get().voting_timeout;
+
+			let mut timeout_events = BTreeSet::<BoundedString<T::IPFSLength>>::new();
+
+			if ComplaintTimeouts::<T>::contains_key(timeout_block) {
+				timeout_events = ComplaintTimeouts::<T>::get(timeout_block).unwrap();
+			}
+
+			timeout_events.insert(documentation_ipfs.clone());
+
+			ComplaintTimeouts::<T>::insert(timeout_block, timeout_events);
+
+			// Transfer funds
+			T::Currency::transfer(
+				&validator,
+				&Self::account_id(),
+				PalletFeeValues::<T>::get().complaint_fee,
+				ExistenceRequirement::KeepAlive,
+			)?;
+
+			// Deposit event
+			Self::deposit_event(Event::AccountComplaintOpened(
+				validator,
+				complaint_for,
+				complaint_type,
+				documentation_ipfs,
+			));
+
+			Ok(().into())
+		}
+
+		// Open complaint (for hash entity)
+		#[pallet::call_index(14)]
+		#[pallet::weight(0)]
+		pub fn open_hash_complaint(
+			origin: OriginFor<T>,
+			documentation_ipfs: BoundedString<T::IPFSLength>,
+			complaint_for: H256,
+			complaint_type: ComplaintType,
+		) -> DispatchResultWithPostInfo {
+			let validator = ensure_signed(origin)?;
+
+			// Check if the complaint proposer is a registered validator
+			ensure!(
+				Validators::<T>::contains_key(validator.clone()),
+				Error::<T>::UserIsNotARegisteredValidator
+			);
+
+			// Check if the given IPFS link is currently in use
+			ensure!(
+				Self::is_ipfs_available(documentation_ipfs.clone()),
+				Error::<T>::DocumentationWasUsedPreviously
+			);
+
+			// Check if the proposer has enough credits
+			// TODO: Implement penalty tax
+			ensure!(
+				PalletFeeValues::<T>::get().complaint_fee
+					<= T::Currency::free_balance(&validator.clone()),
+				Error::<T>::InsufficientFunds
+			);
+
+			// Check if the given hash is registered
+			match complaint_type {
+				ComplaintType::ProjectComplaint => {
+					ensure!(
+						Projects::<T>::contains_key(complaint_for),
+						Error::<T>::UnregisteredHash
+					);
+
+					// Freeze carbon credit batches for given project
+					Self::freeze_all_project_batches(complaint_for);
+				},
+				ComplaintType::CarbonCreditBatchComplaint => {
+					// Check if carbon credit batch exists
+					ensure!(CarbonCreditBatches::<T>::contains_key(complaint_for), Error::<T>::CarbonCreditBatchDoesNotExist);
+
+					let mut carbon_credit_batch = CarbonCreditBatches::<T>::get(complaint_for).unwrap();
+
+					// Freeze carbon credit batch
+					carbon_credit_batch =
+						CarbonCreditBatchInfo { status: CarbonCreditBatchStatus::Frozen, ..carbon_credit_batch };
+
+					CarbonCreditBatches::<T>::insert(complaint_for, carbon_credit_batch);
+				},
+				_ => { ensure!(false, Error::<T>::InvalidComplaintType); },
+			}
+
+			// Save complaint
+			let complaint = ComplaintHashBasedInfo {
+				complaint_for: complaint_for.clone(),
+				complaint_type: complaint_type.clone(),
+				complaint_proposer: validator.clone(),
+				creation_date: T::Time::now(),
+				votes_for: BTreeSet::<AccountIdOf<T>>::new(),
+				votes_against: BTreeSet::<AccountIdOf<T>>::new(),
+				complaint_active: true,
+			};
+
+			ComplaintsForHashes::<T>::insert(documentation_ipfs.clone(), complaint);
+
+			// Save complaint timeout event
+			let current_block = frame_system::Pallet::<T>::block_number();
+			let timeout_block = current_block + PalletTimeValues::<T>::get().voting_timeout;
+
+			let mut timeout_events = BTreeSet::<BoundedString<T::IPFSLength>>::new();
+
+			if ComplaintTimeouts::<T>::contains_key(timeout_block) {
+				timeout_events = ComplaintTimeouts::<T>::get(timeout_block).unwrap();
+			}
+
+			timeout_events.insert(documentation_ipfs.clone());
+
+			ComplaintTimeouts::<T>::insert(timeout_block, timeout_events);
+
+			// Transfer funds
+			T::Currency::transfer(
+				&validator,
+				&Self::account_id(),
+				PalletFeeValues::<T>::get().complaint_fee,
+				ExistenceRequirement::KeepAlive,
+			)?;
+
+			// Deposit event
+			Self::deposit_event(Event::HashComplaintOpened(
+				validator,
+				complaint_for,
+				complaint_type,
+				documentation_ipfs,
+			));
+
+			Ok(().into())
+		}
+
+		// Retire carbon credits (only for CFAs)
+		#[pallet::call_index(15)]
+		#[pallet::weight(0)]
+		pub fn retire_carbon_credits(
+			origin: OriginFor<T>,
+			batch_hash: H256,
+			amount_to_retire: BalanceOf<T>,
+		) -> DispatchResultWithPostInfo {
+			let mut footprint_account = ensure_signed(origin)?;
+
+			// Check if the caller is of the CFA type
+			ensure!(CarbonFootprintAccounts::<T>::contains_key(footprint_account.clone()), Error::<T>::UserIsNotOfACarbonFootprintAccountType);
+
+			// Check if the carbon credit batch exists
+			ensure!(CarbonCreditBatches::<T>::contains_key(batch_hash), Error::<T>::CarbonCreditBatchDoesNotExist);
+
+			// Check if the carbon credit batch is active
+			let carbon_credit_batch = CarbonCreditBatches::<T>::get(batch_hash).unwrap();
+
+			ensure!(
+				carbon_credit_batch.status == CarbonCreditBatchStatus::Active,
+				Error::<T>::CarbonCreditBatchIsNotActive,
+			);
+
+			// Check if the caller has any holdings for the given batch
+			ensure!(CarbonCreditHoldings::<T>::contains_key(batch_hash, footprint_account.clone()), Error::<T>::CarbonCreditHoldingsDontExist);
+
+			// Check if the caller has enough credits
+			let mut holdings = CarbonCreditHoldings::<T>::get(batch_hash, footprint_account.clone()).unwrap();
+
+			ensure!(holdings.available_amount >= amount_to_retire, Error::<T>::NotEnoughtAvailableCredits);
+
+			// Calculate actual amount to retire
+			let actual_retiring_amount = BalanceOf::<T>::from(holdings.available_amount - amount_to_retire);
+
+			holdings = CarbonCreditHoldingsInfo {
+				available_amount: actual_retiring_amount,
+				..holdings
+			};
+
+			// Check to see if user holdings needs to be deleted
+			if holdings.available_amount == BalanceOf::<T>::from(0u32) && holdings.unavailable_amount == BalanceOf::<T>::from(0u32) {
+				CarbonCreditHoldings::<T>::remove(batch_hash, footprint_account.clone());
+			} else {
+				CarbonCreditHoldings::<T>::insert(batch_hash, footprint_account.clone(), holdings);
+			}
+
+			// Update carbon footprint information
+			let mut footprint_info = CarbonFootprintAccounts::<T>::get(footprint_account.clone()).unwrap();
+
+			if amount_to_retire >= footprint_info.carbon_footprint_deficit {
+				let difference = amount_to_retire - footprint_info.carbon_footprint_deficit;
+
+				footprint_info = CarbonFootprintAccountInfo {
+					carbon_footprint_suficit: footprint_info.carbon_footprint_suficit + difference,
+					carbon_footprint_deficit: BalanceOf::<T>::from(0u32),
+					..footprint_info
+				};
+			} else {
+				footprint_info = CarbonFootprintAccountInfo {
+					carbon_footprint_deficit: footprint_info.carbon_footprint_deficit - amount_to_retire,
+					..footprint_info
+				};
+			}
+
+			CarbonFootprintAccounts::<T>::insert(footprint_account.clone(), footprint_info);
+
+			// Save retiring information
+			let retirement_info = CarbonCreditRetirementInfo {
+				carbon_footprint_account: footprint_account.clone(),
+				batch_hash: batch_hash,
+				credit_amount: amount_to_retire,
+				retirement_date: T::Time::now(),
+			};
+
+			let retirement_hash = Self::generate_hash(footprint_account.clone());
+
+			CarbonCreditRetirements::<T>::insert(retirement_hash, retirement_info);
+
+			// Deposit event
+			Self::deposit_event(Event::CarbonCreditsHaveBeenRetired(
+				footprint_account,
+				batch_hash,
+				actual_retiring_amount,
+			));
 
 			Ok(().into())
 		}
@@ -1663,6 +2153,7 @@ pub mod pallet {
 			let mut consumed_weight = Self::update_pallet_base_time(now);
 			consumed_weight += Self::check_voting_timeouts(now);
 			consumed_weight += Self::check_sale_timeouts(now);
+			consumed_weight += Self::check_complaint_timeouts(now);
 
 			consumed_weight
 		}
@@ -1713,6 +2204,8 @@ pub mod pallet {
 			if CarbonFootprintReports::<T>::contains_key(ipfs.clone())
 				|| ProjectProposals::<T>::contains_key(ipfs.clone())
 				|| CarbonCreditBatchProposals::<T>::contains_key(ipfs.clone())
+				|| ComplaintsForAccounts::<T>::contains_key(ipfs.clone())
+				|| ComplaintsForHashes::<T>::contains_key(ipfs.clone())
 			{
 				return false;
 			}
@@ -1727,7 +2220,7 @@ pub mod pallet {
 			}
 
 			// Check in validators
-			for (_, validator) in <ProjectValidators<T>>::iter() {
+			for (_, validator) in <Validators<T>>::iter() {
 				if validator.documentation_ipfs == ipfs {
 					return false;
 				}
@@ -1750,7 +2243,7 @@ pub mod pallet {
 			// Check in carbon footprint, trader, project validator and project owner accounts
 			if CarbonFootprintAccounts::<T>::contains_key(account_id.clone())
 				|| TraderAccounts::<T>::get().contains(&account_id.clone())
-				|| ProjectValidators::<T>::contains_key(account_id.clone())
+				|| Validators::<T>::contains_key(account_id.clone())
 				|| ProjectOwners::<T>::contains_key(account_id.clone())
 			{
 				return false;
@@ -1763,9 +2256,9 @@ pub mod pallet {
 		// Return true if the account_id isn't in use for another account type
 		// Return false if the account_id is in use for another account type
 		pub fn is_eligible_for_cfa(account_id: AccountIdOf<T>) -> bool {
-			// Check in carbon footprint, trader, project validator and project owner accounts
+			// Check in carbon footprint, trader, validator and project owner accounts
 			if TraderAccounts::<T>::get().contains(&account_id.clone())
-				|| ProjectValidators::<T>::contains_key(account_id.clone())
+				|| Validators::<T>::contains_key(account_id.clone())
 				|| ProjectOwners::<T>::contains_key(account_id.clone())
 			{
 				return false;
@@ -1779,7 +2272,7 @@ pub mod pallet {
 		// Return true if the account_id can't transact with carbon credits (Validator, or non-registered account)
 		pub fn is_eligible_for_carbon_credit_transaction(account_id: AccountIdOf<T>) -> bool {
 			if CarbonFootprintAccounts::<T>::contains_key(account_id.clone())
-				|| ProjectValidators::<T>::contains_key(account_id.clone())
+				|| TraderAccounts::<T>::get().contains(&account_id.clone())
 				|| ProjectOwners::<T>::contains_key(account_id.clone())
 			{
 				return true;
@@ -1791,15 +2284,17 @@ pub mod pallet {
 		// Check if the account has submitted a carbon footprint report for voting
 		// Note: If a user has submitted a CF report he/she then can not registed as another account type
 		pub fn is_trying_to_register_as_cfa(account_id: AccountIdOf<T>) -> bool {
+			let mut result = false;
+
 			// Check in CF accounts
 			for (_, cf_report) in <CarbonFootprintReports<T>>::iter() {
 				// Check if user has an active CF report that is up for voting
 				if cf_report.cf_account == account_id && cf_report.voting_active {
-					return true;
+					result = true;
 				}
 			}
 
-			return false;
+			result
 		}
 
 		// Check if a year has passed and update pallet base time if it has
@@ -1887,7 +2382,8 @@ pub mod pallet {
 
 					// Update seller holdings
 					let mut seller_holdings =
-						CarbonCreditHoldings::<T>::get(sale_hash, sale_order.clone().seller).unwrap();
+						CarbonCreditHoldings::<T>::get(sale_hash, sale_order.clone().seller)
+							.unwrap();
 
 					seller_holdings = CarbonCreditHoldingsInfo {
 						available_amount: seller_holdings.available_amount
@@ -1911,9 +2407,53 @@ pub mod pallet {
 				.saturating_add(T::DbWeight::get().writes(counter))
 		}
 
+		// Check if any complaint timeout event has occured
+		pub fn check_complaint_timeouts(now: BlockNumber<T>) -> Weight {
+			let mut counter: u64 = 0;
+
+			if ComplaintTimeouts::<T>::contains_key(now) {
+				let complaint_events = ComplaintTimeouts::<T>::get(now).unwrap();
+
+				for complaint in complaint_events.iter() {
+					// Check if complaint is for the account type
+					if ComplaintsForAccounts::<T>::contains_key(complaint) {
+						let mut specific_complaint =
+							ComplaintsForAccounts::<T>::get(complaint).unwrap();
+
+						specific_complaint = ComplaintAccountBasedInfo {
+							complaint_active: false,
+							..specific_complaint
+						};
+
+						// Check complaint type
+						match specific_complaint.complaint_type {
+							ComplaintType::ProjectOwnerComplaint => {
+								// Update values for project owner
+								let mut project_owner =
+									ProjectOwners::<T>::get(specific_complaint.complaint_for);
+
+								// Check penalty level of account
+							},
+							ComplaintType::ValidatorComplaint => {
+								// Update values for validator
+							},
+							_ => {},
+						}
+					}
+
+					// Check if complaint is for the hash type
+					if ComplaintsForHashes::<T>::contains_key(complaint) {}
+				}
+			}
+
+			T::DbWeight::get()
+				.reads(counter)
+				.saturating_add(T::DbWeight::get().writes(counter))
+		}
+
 		// Update carbon footprint account after voting ends
 		pub fn update_carbon_footprint_account(
-			report: CarbonFootprintReportInfo<AccountIdOf<T>, MomentOf<T>>,
+			report: CarbonFootprintReportInfo<AccountIdOf<T>, MomentOf<T>, BalanceOf<T>>,
 			ipfs: BoundedString<T::IPFSLength>,
 		) {
 			// Get the votes that were made for the report
@@ -1923,10 +2463,14 @@ pub mod pallet {
 
 			// Check if the vote has passed
 			if Self::has_vote_passed(votes_total, votes_for) {
+				let mut documentation_ipfses = BTreeSet::<BoundedString<T::IPFSLength>>::new();
+				documentation_ipfses.insert(ipfs.clone());
+
 				// Create an empty carbon footprint account
 				let mut new_account = CarbonFootprintAccountInfo {
-					documentation_ipfses: BTreeSet::<BoundedString<T::IPFSLength>>::new(),
-					carbon_footprint_balance: report.carbon_footprint_balance,
+					documentation_ipfses,
+					carbon_footprint_suficit: report.carbon_footprint_suficit,
+					carbon_footprint_deficit: report.carbon_footprint_deficit,
 					creation_date: T::Time::now(),
 				};
 
@@ -1940,11 +2484,48 @@ pub mod pallet {
 					new_documentation.insert(ipfs.clone());
 
 					// Update the carbon footprint account structure
-					new_account = CarbonFootprintAccountInfo {
-						documentation_ipfses: new_documentation,
-						carbon_footprint_balance: old_account.carbon_footprint_balance
-							+ report.carbon_footprint_balance,
-						creation_date: old_account.creation_date,
+					let mut change_amount = BalanceOf::<T>::from(0u32);
+
+					if report.carbon_footprint_suficit == BalanceOf::<T>::from(0u32) {
+						if report.carbon_footprint_deficit >= old_account.carbon_footprint_suficit {
+							change_amount = report.carbon_footprint_deficit - old_account.carbon_footprint_suficit;
+
+							new_account = CarbonFootprintAccountInfo {
+								documentation_ipfses: new_documentation,
+								carbon_footprint_suficit: BalanceOf::<T>::from(0u32),
+								carbon_footprint_deficit: old_account.carbon_footprint_deficit + change_amount,
+								creation_date: old_account.creation_date,
+							};
+						} else {
+							change_amount = report.carbon_footprint_suficit - new_account.carbon_footprint_deficit;
+
+							new_account = CarbonFootprintAccountInfo {
+								documentation_ipfses: new_documentation,
+								carbon_footprint_suficit: old_account.carbon_footprint_suficit + change_amount,
+								carbon_footprint_deficit: BalanceOf::<T>::from(0u32),
+								creation_date: old_account.creation_date,
+							};
+						}
+					} else {
+						if report.carbon_footprint_suficit >= old_account.carbon_footprint_deficit {
+							change_amount = report.carbon_footprint_suficit - old_account.carbon_footprint_deficit;
+
+							new_account = CarbonFootprintAccountInfo {
+								documentation_ipfses: new_documentation,
+								carbon_footprint_suficit: old_account.carbon_footprint_suficit + change_amount,
+								carbon_footprint_deficit: BalanceOf::<T>::from(0u32),
+								creation_date: old_account.creation_date,
+							};
+						} else {
+							change_amount = report.carbon_footprint_deficit - report.carbon_footprint_suficit;
+							
+							new_account = CarbonFootprintAccountInfo {
+								documentation_ipfses: new_documentation,
+								carbon_footprint_suficit: BalanceOf::<T>::from(0u32),
+								carbon_footprint_deficit: old_account.carbon_footprint_deficit + change_amount,
+								creation_date: old_account.creation_date,
+							};
+						}
 					}
 				}
 
@@ -1957,7 +2538,8 @@ pub mod pallet {
 			let new_report = CarbonFootprintReportInfo {
 				cf_account: report.cf_account.clone(),
 				creation_date: report.creation_date,
-				carbon_footprint_balance: report.carbon_footprint_balance,
+				carbon_footprint_suficit: report.carbon_footprint_suficit,
+				carbon_footprint_deficit: report.carbon_footprint_deficit,
 				votes_for: report.votes_for,
 				votes_against: report.votes_against,
 				voting_active: false,
@@ -2022,15 +2604,15 @@ pub mod pallet {
 				// Create a new project
 				let new_batch = CarbonCreditBatchInfo {
 					documentation_ipfs: ipfs.clone(),
+					project_hash: proposal.project_hash,
 					creation_date: T::Time::now(),
 					credit_amount: proposal.credit_amount,
-					initial_credit_price: proposal.initial_credit_price,
+					penalty_repay_price: proposal.penalty_repay_price,
 					status: CarbonCreditBatchStatus::Active,
 				};
 
 				// Save new carbon credit batch
 				CarbonCreditBatches::<T>::insert(
-					proposal.project_hash,
 					proposal.batch_hash,
 					new_batch,
 				);
@@ -2059,7 +2641,7 @@ pub mod pallet {
 				batch_hash: proposal.batch_hash,
 				creation_date: proposal.creation_date,
 				credit_amount: proposal.credit_amount,
-				initial_credit_price: proposal.initial_credit_price,
+				penalty_repay_price: proposal.penalty_repay_price,
 				votes_for: proposal.votes_for,
 				votes_against: proposal.votes_against,
 				voting_active: false,
@@ -2093,20 +2675,34 @@ pub mod pallet {
 			return false;
 		}
 
-		// Get batch information by hash value
-		pub fn get_batch(
-			batch_hash: H256,
-		) -> Option<
-			CarbonCreditBatchInfo<
-				T::IPFSLength,
-				MomentOf<T>,
-				BalanceOf<T>,
-				CarbonCreditBatchStatus,
-			>,
-		> {
-			CarbonCreditBatches::<T>::iter_prefix(&batch_hash)
-				.into_iter()
-				.find_map(|(hash, info)| if hash == batch_hash { Some(info) } else { None })
+		// Freeze all carbon credit batches for given project owner
+		pub fn freeze_all_owner_batches(project_owner: AccountIdOf<T>) {
+			for (_, project_info) in Projects::<T>::iter() {
+				if project_info.project_owner == project_owner {
+					for (batch_hash, mut batch_info) in CarbonCreditBatches::<T>::iter() {
+						batch_info = CarbonCreditBatchInfo {
+							status: CarbonCreditBatchStatus::Frozen,
+							..batch_info
+						};
+
+					CarbonCreditBatches::<T>::insert(batch_hash, batch_info);
+					} 
+				}
+			}
+		}
+
+		// Freeze all carbon credit batches for given project
+		pub fn freeze_all_project_batches(project: H256) {
+			for (batch_hash, mut batch_info) in CarbonCreditBatches::<T>::iter() {
+				if batch_info.project_hash == project {
+					batch_info = CarbonCreditBatchInfo {
+						status: CarbonCreditBatchStatus::Frozen,
+						..batch_info
+					};
+
+					CarbonCreditBatches::<T>::insert(batch_hash, batch_info);
+				}
+			} 
 		}
 	}
 }
