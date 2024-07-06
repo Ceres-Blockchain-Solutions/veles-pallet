@@ -2233,11 +2233,10 @@ fn propose_project_project_owner_has_standing_debts() {
 		ProjectOwners::<Test>::insert(alice(), project_owner);
 
 		// Insert project owner debts
-		let debt =
-			DebtStructure { debt_collector: bob(), debt_amount: BalanceOf::<Test>::from(10u32) };
-
-		let mut debts = BTreeSet::<DebtStructure<AccountIdOf<Test>, BalanceOf<Test>>>::new();
-		debts.insert(debt);
+		let mut debts = BTreeMap::<AccountIdOf<Test>, BalanceOf<Test>>::new();
+		
+		debts.insert(bob(), BalanceOf::<Test>::from(10u32));
+		debts.insert(charlie(), BalanceOf::<Test>::from(20u32));
 
 		ProjectOwnerDebts::<Test>::insert(alice(), debts);
 
@@ -2456,11 +2455,10 @@ fn propose_carbon_credit_batch_project_owner_has_standing_debts() {
 		ProjectOwners::<Test>::insert(alice(), project_owner);
 
 		// Insert project owner debts
-		let debt =
-			DebtStructure { debt_collector: bob(), debt_amount: BalanceOf::<Test>::from(10u32) };
-
-		let mut debts = BTreeSet::<DebtStructure<AccountIdOf<Test>, BalanceOf<Test>>>::new();
-		debts.insert(debt);
+		let mut debts = BTreeMap::<AccountIdOf<Test>, BalanceOf<Test>>::new();
+		
+		debts.insert(bob(), BalanceOf::<Test>::from(10u32));
+		debts.insert(charlie(), BalanceOf::<Test>::from(20u32));
 
 		ProjectOwnerDebts::<Test>::insert(alice(), debts);
 
@@ -2831,11 +2829,10 @@ fn create_sale_order_project_owner_has_standing_debtst() {
 		ProjectOwners::<Test>::insert(alice(), project_owner);
 
 		// Insert project owner debts
-		let debt =
-			DebtStructure { debt_collector: bob(), debt_amount: BalanceOf::<Test>::from(10u32) };
-
-		let mut debts = BTreeSet::<DebtStructure<AccountIdOf<Test>, BalanceOf<Test>>>::new();
-		debts.insert(debt);
+		let mut debts = BTreeMap::<AccountIdOf<Test>, BalanceOf<Test>>::new();
+		
+		debts.insert(bob(), BalanceOf::<Test>::from(10u32));
+		debts.insert(charlie(), BalanceOf::<Test>::from(20u32));
 
 		ProjectOwnerDebts::<Test>::insert(alice(), debts);
 
@@ -3182,11 +3179,10 @@ fn complete_sale_order_project_owner_has_standing_debts() {
 		ProjectOwners::<Test>::insert(alice(), project_owner);
 
 		// Insert project owner debts
-		let debt =
-			DebtStructure { debt_collector: bob(), debt_amount: BalanceOf::<Test>::from(10u32) };
-
-		let mut debts = BTreeSet::<DebtStructure<AccountIdOf<Test>, BalanceOf<Test>>>::new();
-		debts.insert(debt);
+		let mut debts = BTreeMap::<AccountIdOf<Test>, BalanceOf<Test>>::new();
+		
+		debts.insert(bob(), BalanceOf::<Test>::from(10u32));
+		debts.insert(charlie(), BalanceOf::<Test>::from(20u32));
 
 		ProjectOwnerDebts::<Test>::insert(alice(), debts);
 
@@ -3526,11 +3522,10 @@ fn close_sale_order_project_owner_has_standing_debts() {
 		ProjectOwners::<Test>::insert(alice(), project_owner);
 
 		// Insert project owner debts
-		let debt =
-			DebtStructure { debt_collector: bob(), debt_amount: BalanceOf::<Test>::from(10u32) };
-
-		let mut debts = BTreeSet::<DebtStructure<AccountIdOf<Test>, BalanceOf<Test>>>::new();
-		debts.insert(debt);
+		let mut debts = BTreeMap::<AccountIdOf<Test>, BalanceOf<Test>>::new();
+		
+		debts.insert(bob(), BalanceOf::<Test>::from(10u32));
+		debts.insert(charlie(), BalanceOf::<Test>::from(20u32));
 
 		ProjectOwnerDebts::<Test>::insert(alice(), debts);
 
@@ -5090,14 +5085,10 @@ fn repay_project_owner_debts_insufficient_funds() {
 		ProjectOwners::<Test>::insert(alice(), project_owner);
 
 		// Insert project owner debts
-		let debt_1 =
-			DebtStructure { debt_collector: bob(), debt_amount: BalanceOf::<Test>::from(20u32) };
-		let debt_2 =
-			DebtStructure { debt_collector: charlie(), debt_amount: BalanceOf::<Test>::from(30u32) };
-
-		let mut debts = BTreeSet::<DebtStructure<AccountIdOf<Test>, BalanceOf<Test>>>::new();
-		debts.insert(debt_1);
-		debts.insert(debt_2);
+		let mut debts = BTreeMap::<AccountIdOf<Test>, BalanceOf<Test>>::new();
+		
+		debts.insert(bob(), BalanceOf::<Test>::from(20u32));
+		debts.insert(charlie(), BalanceOf::<Test>::from(30u32));
 
 		ProjectOwnerDebts::<Test>::insert(alice(), debts);
 
@@ -5130,14 +5121,10 @@ fn repay_project_owner_debts_ok() {
 		ProjectOwners::<Test>::insert(charlie(), project_owner);
 
 		// Insert project owner debts
-		let debt_1 =
-			DebtStructure { debt_collector: alice(), debt_amount: BalanceOf::<Test>::from(20u32) };
-		let debt_2 =
-			DebtStructure { debt_collector: bob(), debt_amount: BalanceOf::<Test>::from(30u32) };
-
-		let mut debts = BTreeSet::<DebtStructure<AccountIdOf<Test>, BalanceOf<Test>>>::new();
-		debts.insert(debt_1);
-		debts.insert(debt_2);
+		let mut debts = BTreeMap::<AccountIdOf<Test>, BalanceOf<Test>>::new();
+		
+		debts.insert(alice(), BalanceOf::<Test>::from(20u32));
+		debts.insert(bob(), BalanceOf::<Test>::from(30u32));
 
 		ProjectOwnerDebts::<Test>::insert(charlie(), debts);
 

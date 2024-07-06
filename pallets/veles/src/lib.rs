@@ -9,6 +9,7 @@ pub use frame_support::traits::ExistenceRequirement;
 pub use pallet::*;
 pub use sp_core::{blake2_256, H256};
 pub use sp_std::collections::btree_set::BTreeSet;
+pub use sp_std::collections::btree_map::BTreeMap;
 
 #[cfg(test)]
 mod mock;
@@ -196,17 +197,6 @@ pub struct ProportionStructure {
 	// the upper limit part of out proportion (300 / 4 = 75) which will give us the exact proportion that we need
 	pub proportion_part: u16,
 	pub upper_limit_part: u16,
-}
-
-// Debt structure (used to save project owner debts)
-#[derive(Encode, Decode, Clone, PartialEq, Eq, PartialOrd, Ord, scale_info::TypeInfo)]
-#[cfg_attr(feature = "std", derive(Debug))]
-pub struct DebtStructure<AccountIdOf, BalanceOf> {
-	// Explanation:
-	// Once a carbon credit batch has been terminated the project owner that is connected to that batch mush pay out
-	// the affected holders before he/she can do anything else on the market place
-	pub debt_collector: AccountIdOf,
-	pub debt_amount: BalanceOf,
 }
 
 // Vote type enum
@@ -588,7 +578,7 @@ pub mod pallet {
 		_,
 		Identity,
 		AccountIdOf<T>,
-		BTreeSet<DebtStructure<AccountIdOf<T>, BalanceOf<T>>>,
+		BTreeMap<AccountIdOf<T>, BalanceOf<T>>,
 		ValueQuery,
 	>;
 
@@ -1046,7 +1036,7 @@ pub mod pallet {
 			// Transfer funds
 			T::Currency::transfer(
 				&user,
-				&Self::account_id(),
+				&Self::pallet_id(),
 				PalletFeeValues::<T>::get().trader_account_fee,
 				ExistenceRequirement::KeepAlive,
 			)?;
@@ -1100,7 +1090,7 @@ pub mod pallet {
 			// Transfer funds
 			T::Currency::transfer(
 				&user,
-				&Self::account_id(),
+				&Self::pallet_id(),
 				PalletFeeValues::<T>::get().project_validator_account_fee,
 				ExistenceRequirement::KeepAlive,
 			)?;
@@ -1157,7 +1147,7 @@ pub mod pallet {
 			// Transfer funds
 			T::Currency::transfer(
 				&user,
-				&Self::account_id(),
+				&Self::pallet_id(),
 				PalletFeeValues::<T>::get().project_owner_account_fee,
 				ExistenceRequirement::KeepAlive,
 			)?;
@@ -1247,7 +1237,7 @@ pub mod pallet {
 			// Transfer funds
 			T::Currency::transfer(
 				&user,
-				&Self::account_id(),
+				&Self::pallet_id(),
 				PalletFeeValues::<T>::get().carbon_footprint_report_fee,
 				ExistenceRequirement::KeepAlive,
 			)?;
@@ -1403,7 +1393,7 @@ pub mod pallet {
 			// Transfer funds
 			T::Currency::transfer(
 				&user,
-				&Self::account_id(),
+				&Self::pallet_id(),
 				PalletFeeValues::<T>::get().voting_fee,
 				ExistenceRequirement::KeepAlive,
 			)?;
@@ -1486,7 +1476,7 @@ pub mod pallet {
 			// Transfer funds
 			T::Currency::transfer(
 				&user,
-				&Self::account_id(),
+				&Self::pallet_id(),
 				PalletFeeValues::<T>::get().project_proposal_fee,
 				ExistenceRequirement::KeepAlive,
 			)?;
@@ -1581,7 +1571,7 @@ pub mod pallet {
 			// Transfer funds
 			T::Currency::transfer(
 				&user,
-				&Self::account_id(),
+				&Self::pallet_id(),
 				PalletFeeValues::<T>::get().carbon_credit_batch_fee,
 				ExistenceRequirement::KeepAlive,
 			)?;
@@ -2013,7 +2003,7 @@ pub mod pallet {
 			// Transfer funds
 			T::Currency::transfer(
 				&validator,
-				&Self::account_id(),
+				&Self::pallet_id(),
 				PalletFeeValues::<T>::get().complaint_fee,
 				ExistenceRequirement::KeepAlive,
 			)?;
@@ -2140,7 +2130,7 @@ pub mod pallet {
 			// Transfer funds
 			T::Currency::transfer(
 				&validator,
-				&Self::account_id(),
+				&Self::pallet_id(),
 				PalletFeeValues::<T>::get().complaint_fee,
 				ExistenceRequirement::KeepAlive,
 			)?;
@@ -2286,7 +2276,7 @@ pub mod pallet {
 			let mut total_debt = BalanceOf::<T>::from(0u32);
 
 			for debt in debts.iter() {
-				total_debt += debt.debt_amount;
+				total_debt += *debt.1;
 			}
 
 			// Check to see if user has enough assets
@@ -2300,8 +2290,8 @@ pub mod pallet {
 				// Transfer funds
 				T::Currency::transfer(
 					&project_owner,
-					&debt.debt_collector,
-					debt.debt_amount,
+					&debt.0,
+					*debt.1,
 					ExistenceRequirement::KeepAlive,
 				)?;
 			}
@@ -2371,7 +2361,7 @@ pub mod pallet {
 
 	impl<T: Config> Pallet<T> {
 		// Get account ID of pallet
-		fn account_id() -> T::AccountId {
+		fn pallet_id() -> T::AccountId {
 			PALLET_ID.into_account_truncating()
 		}
 
@@ -3080,21 +3070,22 @@ pub mod pallet {
 			let batch_info = CarbonCreditBatches::<T>::get(batch_hash).unwrap();
 			let project_info = Projects::<T>::get(batch_info.project_hash).unwrap();
 
-			let mut debts = BTreeSet::<DebtStructure<AccountIdOf<T>, BalanceOf<T>>>::new();
+			let mut debts = BTreeMap::<AccountIdOf<T>, BalanceOf<T>>::new();
 
 			if ProjectOwnerDebts::<T>::contains_key(project_info.project_owner.clone()) {
-				debts = ProjectOwnerDebts::<T>::get(project_info.project_owner);
+				debts = ProjectOwnerDebts::<T>::get(project_info.project_owner.clone());
 			}
 
 			// Go through all carbon credit retirements
 			for (_, retirement_info) in CarbonCreditRetirements::<T>::iter() {
 				if retirement_info.batch_hash == batch_hash {
-					let debt = DebtStructure {
-						debt_collector: retirement_info.carbon_footprint_account,
-						debt_amount: retirement_info.credit_amount * batch_info.penalty_repay_price,
-					};
+					let mut debt_amount = retirement_info.credit_amount * batch_info.penalty_repay_price;
 
-					debts.insert(debt);
+					if debts.contains_key(&retirement_info.carbon_footprint_account) {
+						debt_amount += *debts.get(&retirement_info.carbon_footprint_account).unwrap();
+					}
+
+					debts.insert(retirement_info.carbon_footprint_account, debt_amount);
 				}
 			}
 
@@ -3104,12 +3095,17 @@ pub mod pallet {
 					let total_credits =
 						holdings_info.available_amount + holdings_info.unavailable_amount;
 
-					let debt = DebtStructure {
-						debt_collector: holding_account,
-						debt_amount: total_credits * batch_info.penalty_repay_price,
-					};
+					let mut debt_amount = total_credits * batch_info.penalty_repay_price;
 
-					debts.insert(debt);
+					if debts.contains_key(&holding_account) {
+						debt_amount += *debts.get(&holding_account).unwrap();
+					}
+
+					if holding_account == project_info.project_owner {
+						debts.insert(Self::pallet_id(), debt_amount);
+					} else { 
+						debts.insert(holding_account, debt_amount);
+					}
 				}
 			}
 
