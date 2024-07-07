@@ -8,8 +8,8 @@ pub use frame_support::traits::Currency;
 pub use frame_support::traits::ExistenceRequirement;
 pub use pallet::*;
 pub use sp_core::{blake2_256, H256};
-pub use sp_std::collections::btree_set::BTreeSet;
 pub use sp_std::collections::btree_map::BTreeMap;
+pub use sp_std::collections::btree_set::BTreeSet;
 
 #[cfg(test)]
 mod mock;
@@ -594,13 +594,8 @@ pub mod pallet {
 	// Project owner debts
 	#[pallet::storage]
 	#[pallet::getter(fn project_owner_debts)]
-	pub(super) type ProjectOwnerDebts<T: Config> = StorageMap<
-		_,
-		Identity,
-		AccountIdOf<T>,
-		BTreeMap<AccountIdOf<T>, BalanceOf<T>>,
-		ValueQuery,
-	>;
+	pub(super) type ProjectOwnerDebts<T: Config> =
+		StorageMap<_, Identity, AccountIdOf<T>, BTreeMap<AccountIdOf<T>, BalanceOf<T>>, ValueQuery>;
 
 	// Penalty timeouts (for AccountID's)
 	#[pallet::storage]
@@ -864,7 +859,10 @@ pub mod pallet {
 		// Update penalty levels
 		#[pallet::call_index(1)]
 		#[pallet::weight(0)]
-		pub fn update_penalty_levels(origin: OriginFor<T>, new_penalty_levels: BTreeMap<u8, BalanceOf<T>>) -> DispatchResultWithPostInfo {
+		pub fn update_penalty_levels(
+			origin: OriginFor<T>,
+			new_penalty_levels: BTreeMap<u8, BalanceOf<T>>,
+		) -> DispatchResultWithPostInfo {
 			let user = ensure_signed(origin)?;
 
 			// Check if caller is a Authority account
@@ -873,7 +871,7 @@ pub mod pallet {
 				Error::<T>::Unauthorized
 			);
 
-			// Check if all penalty levels have been submitted 
+			// Check if all penalty levels have been submitted
 			ensure!(
 				new_penalty_levels.len() == 5,
 				Error::<T>::NotAllPenaltyLevelsHaveBeenSubmitted
@@ -881,21 +879,26 @@ pub mod pallet {
 
 			// Check if all levels are given as a 5 number value
 			for (level, value) in new_penalty_levels.iter() {
-				ensure!((*value / BalanceOf::<T>::from(10000u32) > BalanceOf::<T>::from(0u32)  && *value / BalanceOf::<T>::from(10000u32) < BalanceOf::<T>::from(9u32)), Error::<T>::InvalidPenaltyLevelValue); 
-			
+				ensure!(
+					(*value / BalanceOf::<T>::from(10000u32) > BalanceOf::<T>::from(0u32)
+						&& *value / BalanceOf::<T>::from(10000u32) < BalanceOf::<T>::from(9u32)),
+					Error::<T>::InvalidPenaltyLevelValue
+				);
+
 				if *level == 4 {
 					continue;
 				}
 
 				// Check if levels are of a increasing order
-				ensure!(new_penalty_levels[&level] < new_penalty_levels[&(level + 1)], Error::<T>::InvalidPenaltyLevelValue)
+				ensure!(
+					new_penalty_levels[&level] < new_penalty_levels[&(level + 1)],
+					Error::<T>::InvalidPenaltyLevelValue
+				)
 			}
 
 			PenaltyLevels::<T>::set(new_penalty_levels.clone());
 
-			Self::deposit_event(Event::PenaltyLevelsUpdated(
-				new_penalty_levels,
-			));
+			Self::deposit_event(Event::PenaltyLevelsUpdated(new_penalty_levels));
 
 			Ok(().into())
 		}
@@ -1327,7 +1330,10 @@ pub mod pallet {
 			// Check if caller is Validator account
 			ensure!(Validators::<T>::contains_key(user.clone()), Error::<T>::Unauthorized);
 
-			let amount_to_pay = Self::calculage_payment_made_to_pallet(user.clone(), PalletFeeValues::<T>::get().voting_fee);
+			let amount_to_pay = Self::calculate_basic_payment_made_to_pallet(
+				user.clone(),
+				PalletFeeValues::<T>::get().voting_fee,
+			);
 
 			// Check if caller has sufficient funds
 			ensure!(
@@ -1500,12 +1506,14 @@ pub mod pallet {
 				Error::<T>::DocumentationWasUsedPreviously
 			);
 
-			let amount_to_pay = Self::calculage_payment_made_to_pallet(user.clone(), PalletFeeValues::<T>::get().project_proposal_fee);
+			let amount_to_pay = Self::calculate_basic_payment_made_to_pallet(
+				user.clone(),
+				PalletFeeValues::<T>::get().project_proposal_fee,
+			);
 
 			// Check if caller has sufficient funds
 			ensure!(
-				amount_to_pay
-					<= T::Currency::free_balance(&user.clone()),
+				amount_to_pay <= T::Currency::free_balance(&user.clone()),
 				Error::<T>::InsufficientFunds
 			);
 
@@ -1595,10 +1603,15 @@ pub mod pallet {
 				Error::<T>::DocumentationWasUsedPreviously
 			);
 
+			let amount_to_pay = Self::calculate_complex_payment_made_to_pallet(
+				project.project_owner,
+				project_hash,
+				PalletFeeValues::<T>::get().carbon_credit_batch_fee,
+			);
+
 			// Check if caller has sufficient funds
 			ensure!(
-				PalletFeeValues::<T>::get().carbon_credit_batch_fee
-					<= T::Currency::free_balance(&user.clone()),
+				amount_to_pay <= T::Currency::free_balance(&user.clone()),
 				Error::<T>::InsufficientFunds
 			);
 
@@ -1811,8 +1824,6 @@ pub mod pallet {
 				Error::<T>::CarbonCreditBatchIsNotActive,
 			);
 
-			// TODO: Implement penalty charges
-
 			// Check if the buyer has enough assets
 			let amount_to_pay = sale_order.credit_amount * sale_order.credit_price;
 
@@ -2005,12 +2016,14 @@ pub mod pallet {
 				Error::<T>::DocumentationWasUsedPreviously
 			);
 
-			let amount_to_pay = Self::calculage_payment_made_to_pallet(validator.clone(), PalletFeeValues::<T>::get().project_proposal_fee);
+			let amount_to_pay = Self::calculate_basic_payment_made_to_pallet(
+				validator.clone(),
+				PalletFeeValues::<T>::get().project_proposal_fee,
+			);
 
 			// Check if the proposer has enough credits
 			ensure!(
-				amount_to_pay
-					<= T::Currency::free_balance(&validator.clone()),
+				amount_to_pay <= T::Currency::free_balance(&validator.clone()),
 				Error::<T>::InsufficientFunds
 			);
 
@@ -2704,13 +2717,12 @@ pub mod pallet {
 			let account_ids = PenaltyTimeoutsAccounts::<T>::get(now).unwrap();
 
 			let current_block = frame_system::Pallet::<T>::block_number();
-			let new_timeout_block =
-				current_block + PalletTimeValues::<T>::get().penalty_timeout;
+			let new_timeout_block = current_block + PalletTimeValues::<T>::get().penalty_timeout;
 
 			for account_id in account_ids.iter() {
 				if ProjectOwners::<T>::contains_key(account_id) {
 					let mut project_owner = ProjectOwners::<T>::get(account_id).unwrap();
-				
+
 					let new_penalty_level = project_owner.penalty_level - 1;
 					let mut new_penalty_timeout = new_timeout_block;
 
@@ -2749,7 +2761,6 @@ pub mod pallet {
 
 					*counter += 1;
 				}
-				
 			}
 
 			PenaltyTimeoutsAccounts::<T>::remove(now);
@@ -2760,13 +2771,12 @@ pub mod pallet {
 			let hashes = PenaltyTimeoutsHashes::<T>::get(now).unwrap();
 
 			let current_block = frame_system::Pallet::<T>::block_number();
-			let new_timeout_block =
-				current_block + PalletTimeValues::<T>::get().penalty_timeout;
+			let new_timeout_block = current_block + PalletTimeValues::<T>::get().penalty_timeout;
 
 			for hash in hashes.iter() {
 				if Projects::<T>::contains_key(hash) {
 					let mut project = Projects::<T>::get(hash).unwrap();
-				
+
 					let new_penalty_level = project.penalty_level - 1;
 					let mut new_penalty_timeout = new_timeout_block;
 
@@ -3256,10 +3266,12 @@ pub mod pallet {
 			// Go through all carbon credit retirements
 			for (_, retirement_info) in CarbonCreditRetirements::<T>::iter() {
 				if retirement_info.batch_hash == batch_hash {
-					let mut debt_amount = retirement_info.credit_amount * batch_info.penalty_repay_price;
+					let mut debt_amount =
+						retirement_info.credit_amount * batch_info.penalty_repay_price;
 
 					if debts.contains_key(&retirement_info.carbon_footprint_account) {
-						debt_amount += *debts.get(&retirement_info.carbon_footprint_account).unwrap();
+						debt_amount +=
+							*debts.get(&retirement_info.carbon_footprint_account).unwrap();
 					}
 
 					debts.insert(retirement_info.carbon_footprint_account, debt_amount);
@@ -3280,7 +3292,7 @@ pub mod pallet {
 
 					if holding_account == project_info.project_owner {
 						debts.insert(Self::pallet_id(), debt_amount);
-					} else { 
+					} else {
 						debts.insert(holding_account, debt_amount);
 					}
 				}
@@ -3442,13 +3454,16 @@ pub mod pallet {
 			return result;
 		}
 
-		// Calculate payment made to pallet
-		pub fn calculage_payment_made_to_pallet(from: AccountIdOf<T>, amount: BalanceOf<T>) -> BalanceOf<T> {
-			// Retrieve needed account info data  
+		// Calculate basic payment made to pallet
+		pub fn calculate_basic_payment_made_to_pallet(
+			from: AccountIdOf<T>,
+			amount: BalanceOf<T>,
+		) -> BalanceOf<T> {
+			// Retrieve needed account info data
 			let mut account_info = ProjectValidatorOrProjectOwnerInfo {
 				documentation_ipfs: BoundedString::<T::IPFSLength>::truncate_from("empty_ipfs"),
 				penalty_level: 0u8,
-				penalty_timeout:  frame_system::Pallet::<T>::block_number(),
+				penalty_timeout: frame_system::Pallet::<T>::block_number(),
 			};
 
 			if Validators::<T>::contains_key(from.clone()) {
@@ -3461,13 +3476,45 @@ pub mod pallet {
 
 			// Set penalty level percentage
 			let mut penalty_percentage = BalanceOf::<T>::from(10000u32);
-			
-			if account_info.documentation_ipfs != BoundedString::<T::IPFSLength>::truncate_from("empty_ipfs") {
+
+			if account_info.documentation_ipfs
+				!= BoundedString::<T::IPFSLength>::truncate_from("empty_ipfs")
+			{
 				let penalty_percentages = PenaltyLevels::<T>::get();
 
 				penalty_percentage = penalty_percentages[&account_info.penalty_level];
 			}
 
+			let actual_amount = penalty_percentage * amount / BalanceOf::<T>::from(10000u32);
+
+			actual_amount
+		}
+
+		// Calculate complex payment made to pallet
+		// Note: Only used for project owners during proposition for carbon credit batches
+		pub fn calculate_complex_payment_made_to_pallet(
+			owner_id: AccountIdOf<T>,
+			project_hash: H256,
+			amount: BalanceOf<T>,
+		) -> BalanceOf<T> {
+			// Get owner info
+			let owner_info = ProjectOwners::<T>::get(owner_id).unwrap();
+
+			// Get project info
+			let project_info = Projects::<T>::get(project_hash).unwrap();
+
+			// Get penalty levels
+			let penalty_levels = PenaltyLevels::<T>::get();
+
+			// Get owner and project penalty level values
+			let owner_penalty_percentage = penalty_levels[&owner_info.penalty_level];
+			let project_penalty_percentage = penalty_levels[&project_info.penalty_level];
+
+			// Calculate total penalty percentage
+			let penalty_percentage = owner_penalty_percentage * project_penalty_percentage
+				/ BalanceOf::<T>::from(10000u32);
+
+			// Calculate actual amount that needs to be paid
 			let actual_amount = penalty_percentage * amount / BalanceOf::<T>::from(10000u32);
 
 			actual_amount
