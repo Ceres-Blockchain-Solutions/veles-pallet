@@ -170,7 +170,7 @@ fn update_penalty_levels_not_all_penalty_levels_have_been_submitted() {
 		// Insert authority account
 		let mut new_authorities = AuthorityAccounts::<Test>::get();
 		new_authorities.insert(alice());
-		
+
 		AuthorityAccounts::<Test>::set(new_authorities);
 
 		let mut new_penalty_levels = BTreeMap::<u8, BalanceOf<Test>>::new();
@@ -196,7 +196,7 @@ fn update_penalty_levels_invalid_penalty_level_value() {
 		// Insert authority account
 		let mut new_authorities = AuthorityAccounts::<Test>::get();
 		new_authorities.insert(alice());
-		
+
 		AuthorityAccounts::<Test>::set(new_authorities);
 
 		let mut new_penalty_levels = BTreeMap::<u8, BalanceOf<Test>>::new();
@@ -223,7 +223,7 @@ fn update_penalty_levels_ok() {
 		// Insert authority account
 		let mut new_authorities = AuthorityAccounts::<Test>::get();
 		new_authorities.insert(alice());
-		
+
 		AuthorityAccounts::<Test>::set(new_authorities);
 
 		let mut new_penalty_levels = BTreeMap::<u8, BalanceOf<Test>>::new();
@@ -234,9 +234,10 @@ fn update_penalty_levels_ok() {
 		new_penalty_levels.insert(4, 36050);
 
 		// Successfully update penalty levels
-		assert_ok!(
-			Veles::update_penalty_levels(RuntimeOrigin::signed(alice()), new_penalty_levels)
-		);
+		assert_ok!(Veles::update_penalty_levels(
+			RuntimeOrigin::signed(alice()),
+			new_penalty_levels
+		));
 
 		// Check if penalty values match
 		let penalty_levels = PenaltyLevels::<Test>::get();
@@ -2343,7 +2344,7 @@ fn propose_project_project_owner_has_standing_debts() {
 
 		// Insert project owner debts
 		let mut debts = BTreeMap::<AccountIdOf<Test>, BalanceOf<Test>>::new();
-		
+
 		debts.insert(bob(), BalanceOf::<Test>::from(10u32));
 		debts.insert(charlie(), BalanceOf::<Test>::from(20u32));
 
@@ -2565,7 +2566,7 @@ fn propose_carbon_credit_batch_project_owner_has_standing_debts() {
 
 		// Insert project owner debts
 		let mut debts = BTreeMap::<AccountIdOf<Test>, BalanceOf<Test>>::new();
-		
+
 		debts.insert(bob(), BalanceOf::<Test>::from(10u32));
 		debts.insert(charlie(), BalanceOf::<Test>::from(20u32));
 
@@ -2939,7 +2940,7 @@ fn create_sale_order_project_owner_has_standing_debtst() {
 
 		// Insert project owner debts
 		let mut debts = BTreeMap::<AccountIdOf<Test>, BalanceOf<Test>>::new();
-		
+
 		debts.insert(bob(), BalanceOf::<Test>::from(10u32));
 		debts.insert(charlie(), BalanceOf::<Test>::from(20u32));
 
@@ -3289,7 +3290,7 @@ fn complete_sale_order_project_owner_has_standing_debts() {
 
 		// Insert project owner debts
 		let mut debts = BTreeMap::<AccountIdOf<Test>, BalanceOf<Test>>::new();
-		
+
 		debts.insert(bob(), BalanceOf::<Test>::from(10u32));
 		debts.insert(charlie(), BalanceOf::<Test>::from(20u32));
 
@@ -3632,7 +3633,7 @@ fn close_sale_order_project_owner_has_standing_debts() {
 
 		// Insert project owner debts
 		let mut debts = BTreeMap::<AccountIdOf<Test>, BalanceOf<Test>>::new();
-		
+
 		debts.insert(bob(), BalanceOf::<Test>::from(10u32));
 		debts.insert(charlie(), BalanceOf::<Test>::from(20u32));
 
@@ -5139,9 +5140,7 @@ fn repay_project_owner_debts_project_owner_doesnt_exist() {
 
 		// Check for ProjectOwnerDoesntExist error
 		assert_err!(
-			Veles::repay_project_owner_debts(
-				RuntimeOrigin::signed(alice()),
-			),
+			Veles::repay_project_owner_debts(RuntimeOrigin::signed(alice()),),
 			Error::<Test>::ProjectOwnerDoesntExist
 		);
 	});
@@ -5167,9 +5166,7 @@ fn repay_project_owner_debts_project_owner_doesnt_have_any_debts() {
 
 		// Check for ProjectOwnerDoesntHaveAnyDebts error
 		assert_err!(
-			Veles::repay_project_owner_debts(
-				RuntimeOrigin::signed(alice()),
-			),
+			Veles::repay_project_owner_debts(RuntimeOrigin::signed(alice()),),
 			Error::<Test>::ProjectOwnerDoesntHaveAnyDebts
 		);
 	});
@@ -5195,7 +5192,7 @@ fn repay_project_owner_debts_insufficient_funds() {
 
 		// Insert project owner debts
 		let mut debts = BTreeMap::<AccountIdOf<Test>, BalanceOf<Test>>::new();
-		
+
 		debts.insert(bob(), BalanceOf::<Test>::from(20u32));
 		debts.insert(charlie(), BalanceOf::<Test>::from(30u32));
 
@@ -5203,9 +5200,7 @@ fn repay_project_owner_debts_insufficient_funds() {
 
 		// Check for InsufficientFunds error
 		assert_err!(
-			Veles::repay_project_owner_debts(
-				RuntimeOrigin::signed(alice()),
-			),
+			Veles::repay_project_owner_debts(RuntimeOrigin::signed(alice()),),
 			Error::<Test>::InsufficientFunds
 		);
 	});
@@ -5231,7 +5226,7 @@ fn repay_project_owner_debts_ok() {
 
 		// Insert project owner debts
 		let mut debts = BTreeMap::<AccountIdOf<Test>, BalanceOf<Test>>::new();
-		
+
 		debts.insert(alice(), BalanceOf::<Test>::from(20u32));
 		debts.insert(bob(), BalanceOf::<Test>::from(30u32));
 
@@ -5246,11 +5241,7 @@ fn repay_project_owner_debts_ok() {
 		assert_eq!(ProjectOwnerDebts::<Test>::contains_key(charlie()), true);
 
 		// Successfully pay off project owner debts
-		assert_ok!(
-			Veles::repay_project_owner_debts(
-				RuntimeOrigin::signed(charlie()),
-			)
-		);
+		assert_ok!(Veles::repay_project_owner_debts(RuntimeOrigin::signed(charlie()),));
 
 		// Check debt storage
 		assert_eq!(ProjectOwnerDebts::<Test>::contains_key(charlie()), false);
