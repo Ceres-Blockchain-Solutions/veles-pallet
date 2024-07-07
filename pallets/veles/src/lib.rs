@@ -2335,6 +2335,7 @@ pub mod pallet {
 			consumed_weight += Self::check_voting_timeouts(now);
 			consumed_weight += Self::check_sale_timeouts(now);
 			consumed_weight += Self::check_complaint_timeouts(now);
+			consumed_weight += Self::check_penalty_timeouts(now);
 
 			consumed_weight
 		}
@@ -2610,6 +2611,113 @@ pub mod pallet {
 			T::DbWeight::get()
 				.reads(counter)
 				.saturating_add(T::DbWeight::get().writes(counter))
+		}
+
+		// Check if any penalty timeout event has occured
+		pub fn check_penalty_timeouts(now: BlockNumber<T>) -> Weight {
+			let mut counter: u64 = 0;
+
+			if PenaltyTimeoutsAccounts::<T>::contains_key(now) {
+				Self::update_account_penalties(now, &mut counter);
+			}
+
+			if PenaltyTimeoutsHashes::<T>::contains_key(now) {
+				Self::update_hash_penalties(now, &mut counter);
+			}
+
+			T::DbWeight::get()
+				.reads(counter)
+				.saturating_add(T::DbWeight::get().writes(counter))
+		}
+
+		// Update account based penalties
+		pub fn update_account_penalties(now: BlockNumber<T>, counter: &mut u64) {
+			let account_ids = PenaltyTimeoutsAccounts::<T>::get(now).unwrap();
+
+			let current_block = frame_system::Pallet::<T>::block_number();
+			let new_timeout_block =
+				current_block + PalletTimeValues::<T>::get().penalty_timeout;
+
+			for account_id in account_ids.iter() {
+				if ProjectOwners::<T>::contains_key(account_id) {
+					let mut project_owner = ProjectOwners::<T>::get(account_id).unwrap();
+				
+					let new_penalty_level = project_owner.penalty_level - 1;
+					let mut new_penalty_timeout = new_timeout_block;
+
+					if new_penalty_level == 0 {
+						new_penalty_timeout = BlockNumber::<T>::from(0u32);
+					}
+
+					project_owner = ProjectValidatorOrProjectOwnerInfo {
+						penalty_level: new_penalty_level,
+						penalty_timeout: new_penalty_timeout,
+						..project_owner
+					};
+
+					ProjectOwners::<T>::insert(account_id, project_owner);
+
+					*counter += 1;
+				}
+
+				if Validators::<T>::contains_key(account_id) {
+					let mut validator = Validators::<T>::get(account_id).unwrap();
+
+					let new_penalty_level = validator.penalty_level - 1;
+					let mut new_penalty_timeout = new_timeout_block;
+
+					if new_penalty_level == 0 {
+						new_penalty_timeout = BlockNumber::<T>::from(0u32);
+					}
+
+					validator = ProjectValidatorOrProjectOwnerInfo {
+						penalty_level: new_penalty_level,
+						penalty_timeout: new_penalty_timeout,
+						..validator
+					};
+
+					Validators::<T>::insert(account_id, validator);
+
+					*counter += 1;
+				}
+				
+			}
+
+			PenaltyTimeoutsAccounts::<T>::remove(now);
+		}
+
+		// Update hash based penalties
+		pub fn update_hash_penalties(now: BlockNumber<T>, counter: &mut u64) {
+			let hashes = PenaltyTimeoutsHashes::<T>::get(now).unwrap();
+
+			let current_block = frame_system::Pallet::<T>::block_number();
+			let new_timeout_block =
+				current_block + PalletTimeValues::<T>::get().penalty_timeout;
+
+			for hash in hashes.iter() {
+				if Projects::<T>::contains_key(hash) {
+					let mut project = Projects::<T>::get(hash).unwrap();
+				
+					let new_penalty_level = project.penalty_level - 1;
+					let mut new_penalty_timeout = new_timeout_block;
+
+					if new_penalty_level == 0 {
+						new_penalty_timeout = BlockNumber::<T>::from(0u32);
+					}
+
+					project = ProjectInfo {
+						penalty_level: new_penalty_level,
+						penalty_timeout: new_penalty_timeout,
+						..project
+					};
+
+					Projects::<T>::insert(hash, project);
+
+					*counter += 1;
+				}
+			}
+
+			PenaltyTimeoutsHashes::<T>::remove(now);
 		}
 
 		// Update carbon footprint account after voting ends
