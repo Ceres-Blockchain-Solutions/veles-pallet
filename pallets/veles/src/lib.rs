@@ -439,6 +439,20 @@ pub mod pallet {
 		pass_voting_ratio
 	}
 
+	// Default value for penalty levels
+	#[pallet::type_value]
+	pub fn DefaultForPenaltyLevels<T: Config>() -> BTreeMap<u8, BalanceOf<T>> {
+		let mut penalty_levels = BTreeMap::<u8, BalanceOf<T>>::new();
+
+		penalty_levels.insert(0u8, BalanceOf::<T>::from(10000u32));
+		penalty_levels.insert(1u8, BalanceOf::<T>::from(16700u32));
+		penalty_levels.insert(2u8, BalanceOf::<T>::from(23000u32));
+		penalty_levels.insert(3u8, BalanceOf::<T>::from(27550u32));
+		penalty_levels.insert(4u8, BalanceOf::<T>::from(32000u32));
+
+		penalty_levels
+	}
+
 	/// Pallet storages
 	// Fee values
 	#[pallet::storage]
@@ -457,6 +471,12 @@ pub mod pallet {
 	#[pallet::getter(fn vote_pass_ratio)]
 	pub type VotePassRatio<T: Config> =
 		StorageValue<_, ProportionStructure, ValueQuery, DefaultForVotePassRatio<T>>;
+
+	// Penalty levels
+	#[pallet::storage]
+	#[pallet::getter(fn penalty_levels)]
+	pub type PenaltyLevels<T: Config> =
+		StorageValue<_, BTreeMap<u8, BalanceOf<T>>, ValueQuery, DefaultForPenaltyLevels<T>>;
 
 	// Authority accounts
 	#[pallet::storage]
@@ -708,6 +728,8 @@ pub mod pallet {
 		CarbonCreditsHaveBeenRetired(AccountIdOf<T>, H256, BalanceOf<T>),
 		/// Project Owner Debts Have Been Repaid
 		ProjectOwnerDebtsHaveBeenRepaid(AccountIdOf<T>),
+		///Penalty Levels Updated
+		PenaltyLevelsUpdated(BTreeMap<u8, BalanceOf<T>>),
 	}
 
 	#[pallet::error]
@@ -792,6 +814,10 @@ pub mod pallet {
 		ProjectOwnerDoesntExist,
 		/// Project owner doesnt have any debts
 		ProjectOwnerDoesntHaveAnyDebts,
+		/// Not all penalty levels have been submitted
+		NotAllPenaltyLevelsHaveBeenSubmitted,
+		/// Invalid penalty level value
+		InvalidPenaltyLevelValue,
 	}
 
 	#[pallet::call]
@@ -835,8 +861,47 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		// Update specific time value
+		// Update penalty levels
 		#[pallet::call_index(1)]
+		#[pallet::weight(0)]
+		pub fn update_penalty_levels(origin: OriginFor<T>, new_penalty_levels: BTreeMap<u8, BalanceOf<T>>) -> DispatchResultWithPostInfo {
+			let user = ensure_signed(origin)?;
+
+			// Check if caller is a Authority account
+			ensure!(
+				AuthorityAccounts::<T>::get().contains(&user.clone()),
+				Error::<T>::Unauthorized
+			);
+
+			// Check if all penalty levels have been submitted 
+			ensure!(
+				new_penalty_levels.len() == 5,
+				Error::<T>::NotAllPenaltyLevelsHaveBeenSubmitted
+			);
+
+			// Check if all levels are given as a 5 number value
+			for (level, value) in new_penalty_levels.iter() {
+				ensure!((*value / BalanceOf::<T>::from(10000u32) > BalanceOf::<T>::from(0u32)  && *value / BalanceOf::<T>::from(10000u32) < BalanceOf::<T>::from(9u32)), Error::<T>::InvalidPenaltyLevelValue); 
+			
+				if *level == 4 {
+					continue;
+				}
+
+				// Check if levels are of a increasing order
+				ensure!(new_penalty_levels[&level] < new_penalty_levels[&(level + 1)], Error::<T>::InvalidPenaltyLevelValue)
+			}
+
+			PenaltyLevels::<T>::set(new_penalty_levels.clone());
+
+			Self::deposit_event(Event::PenaltyLevelsUpdated(
+				new_penalty_levels,
+			));
+
+			Ok(().into())
+		}
+
+		// Update specific time value
+		#[pallet::call_index(2)]
 		#[pallet::weight(0)]
 		pub fn update_time_value(
 			origin: OriginFor<T>,
@@ -910,7 +975,7 @@ pub mod pallet {
 		}
 
 		// Update specific fee value
-		#[pallet::call_index(2)]
+		#[pallet::call_index(3)]
 		#[pallet::weight(0)]
 		pub fn update_fee_value(
 			origin: OriginFor<T>,
@@ -1007,7 +1072,7 @@ pub mod pallet {
 		}
 
 		// Register for a trader account
-		#[pallet::call_index(3)]
+		#[pallet::call_index(4)]
 		#[pallet::weight(0)]
 		pub fn register_for_trader_account(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
 			let user = ensure_signed(origin)?;
@@ -1048,7 +1113,7 @@ pub mod pallet {
 		}
 
 		// Register for a project validator account
-		#[pallet::call_index(4)]
+		#[pallet::call_index(5)]
 		#[pallet::weight(0)]
 		pub fn register_for_project_validator_account(
 			origin: OriginFor<T>,
@@ -1105,7 +1170,7 @@ pub mod pallet {
 		}
 
 		// Register for a project owner account
-		#[pallet::call_index(5)]
+		#[pallet::call_index(6)]
 		#[pallet::weight(0)]
 		pub fn register_for_project_owner_account(
 			origin: OriginFor<T>,
@@ -1162,7 +1227,7 @@ pub mod pallet {
 		}
 
 		// Submit carbon footprint report
-		#[pallet::call_index(6)]
+		#[pallet::call_index(7)]
 		#[pallet::weight(0)]
 		pub fn submit_carbon_footprint_report(
 			origin: OriginFor<T>,
@@ -1249,7 +1314,7 @@ pub mod pallet {
 		}
 
 		// Vote for/against Carbon Deficit Reports or for/against project Proposals
-		#[pallet::call_index(7)]
+		#[pallet::call_index(8)]
 		#[pallet::weight(0)]
 		pub fn cast_vote(
 			origin: OriginFor<T>,
@@ -1262,9 +1327,11 @@ pub mod pallet {
 			// Check if caller is Validator account
 			ensure!(Validators::<T>::contains_key(user.clone()), Error::<T>::Unauthorized);
 
+			let amount_to_pay = Self::calculage_payment_made_to_pallet(user.clone(), PalletFeeValues::<T>::get().voting_fee);
+
 			// Check if caller has sufficient funds
 			ensure!(
-				PalletFeeValues::<T>::get().voting_fee <= T::Currency::free_balance(&user.clone()),
+				amount_to_pay <= T::Currency::free_balance(&user.clone()),
 				Error::<T>::InsufficientFunds
 			);
 
@@ -1394,7 +1461,7 @@ pub mod pallet {
 			T::Currency::transfer(
 				&user,
 				&Self::pallet_id(),
-				PalletFeeValues::<T>::get().voting_fee,
+				amount_to_pay,
 				ExistenceRequirement::KeepAlive,
 			)?;
 
@@ -1404,7 +1471,7 @@ pub mod pallet {
 		}
 
 		// Propose project
-		#[pallet::call_index(8)]
+		#[pallet::call_index(9)]
 		#[pallet::weight(0)]
 		pub fn propose_project(
 			origin: OriginFor<T>,
@@ -1433,9 +1500,11 @@ pub mod pallet {
 				Error::<T>::DocumentationWasUsedPreviously
 			);
 
+			let amount_to_pay = Self::calculage_payment_made_to_pallet(user.clone(), PalletFeeValues::<T>::get().project_proposal_fee);
+
 			// Check if caller has sufficient funds
 			ensure!(
-				PalletFeeValues::<T>::get().project_proposal_fee
+				amount_to_pay
 					<= T::Currency::free_balance(&user.clone()),
 				Error::<T>::InsufficientFunds
 			);
@@ -1477,7 +1546,7 @@ pub mod pallet {
 			T::Currency::transfer(
 				&user,
 				&Self::pallet_id(),
-				PalletFeeValues::<T>::get().project_proposal_fee,
+				amount_to_pay,
 				ExistenceRequirement::KeepAlive,
 			)?;
 
@@ -1488,7 +1557,7 @@ pub mod pallet {
 		}
 
 		// Propose carbon credit batch
-		#[pallet::call_index(9)]
+		#[pallet::call_index(10)]
 		#[pallet::weight(0)]
 		pub fn propose_carbon_credit_batch(
 			origin: OriginFor<T>,
@@ -1583,7 +1652,7 @@ pub mod pallet {
 		}
 
 		// Create carbon credit sale order
-		#[pallet::call_index(10)]
+		#[pallet::call_index(11)]
 		#[pallet::weight(0)]
 		pub fn create_sale_order(
 			origin: OriginFor<T>,
@@ -1695,7 +1764,7 @@ pub mod pallet {
 		}
 
 		// Complete sale order (buy carbon credits)
-		#[pallet::call_index(11)]
+		#[pallet::call_index(12)]
 		#[pallet::weight(0)]
 		pub fn complete_sale_order(
 			origin: OriginFor<T>,
@@ -1834,7 +1903,7 @@ pub mod pallet {
 		}
 
 		// Close carbon credit sale order
-		#[pallet::call_index(12)]
+		#[pallet::call_index(13)]
 		#[pallet::weight(0)]
 		pub fn close_sale_order(
 			origin: OriginFor<T>,
@@ -1914,7 +1983,7 @@ pub mod pallet {
 		}
 
 		// Open complaint (for AccountId entity)
-		#[pallet::call_index(13)]
+		#[pallet::call_index(14)]
 		#[pallet::weight(0)]
 		pub fn open_account_complaint(
 			origin: OriginFor<T>,
@@ -1936,11 +2005,11 @@ pub mod pallet {
 				Error::<T>::DocumentationWasUsedPreviously
 			);
 
-			// TODO: Implement penalty tax
+			let amount_to_pay = Self::calculage_payment_made_to_pallet(validator.clone(), PalletFeeValues::<T>::get().project_proposal_fee);
 
 			// Check if the proposer has enough credits
 			ensure!(
-				PalletFeeValues::<T>::get().complaint_fee
+				amount_to_pay
 					<= T::Currency::free_balance(&validator.clone()),
 				Error::<T>::InsufficientFunds
 			);
@@ -2004,7 +2073,7 @@ pub mod pallet {
 			T::Currency::transfer(
 				&validator,
 				&Self::pallet_id(),
-				PalletFeeValues::<T>::get().complaint_fee,
+				amount_to_pay,
 				ExistenceRequirement::KeepAlive,
 			)?;
 
@@ -2020,7 +2089,7 @@ pub mod pallet {
 		}
 
 		// Open complaint (for hash entity)
-		#[pallet::call_index(14)]
+		#[pallet::call_index(15)]
 		#[pallet::weight(0)]
 		pub fn open_hash_complaint(
 			origin: OriginFor<T>,
@@ -2147,7 +2216,7 @@ pub mod pallet {
 		}
 
 		// Retire carbon credits (only for CFAs)
-		#[pallet::call_index(15)]
+		#[pallet::call_index(16)]
 		#[pallet::weight(0)]
 		pub fn retire_carbon_credits(
 			origin: OriginFor<T>,
@@ -2254,7 +2323,7 @@ pub mod pallet {
 		// Repay project owner debts (only for project owners)
 		// Note: This extrinsic will not user the penalties to calculate the amout that
 		// 		 is needed for the repayment
-		#[pallet::call_index(16)]
+		#[pallet::call_index(17)]
 		#[pallet::weight(0)]
 		pub fn repay_project_owner_debts(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
 			let project_owner = ensure_signed(origin)?;
@@ -3371,6 +3440,37 @@ pub mod pallet {
 			}
 
 			return result;
+		}
+
+		// Calculate payment made to pallet
+		pub fn calculage_payment_made_to_pallet(from: AccountIdOf<T>, amount: BalanceOf<T>) -> BalanceOf<T> {
+			// Retrieve needed account info data  
+			let mut account_info = ProjectValidatorOrProjectOwnerInfo {
+				documentation_ipfs: BoundedString::<T::IPFSLength>::truncate_from("empty_ipfs"),
+				penalty_level: 0u8,
+				penalty_timeout:  frame_system::Pallet::<T>::block_number(),
+			};
+
+			if Validators::<T>::contains_key(from.clone()) {
+				account_info = Validators::<T>::get(from.clone()).unwrap();
+			}
+
+			if ProjectOwners::<T>::contains_key(from.clone()) {
+				account_info = ProjectOwners::<T>::get(from.clone()).unwrap();
+			}
+
+			// Set penalty level percentage
+			let mut penalty_percentage = BalanceOf::<T>::from(10000u32);
+			
+			if account_info.documentation_ipfs != BoundedString::<T::IPFSLength>::truncate_from("empty_ipfs") {
+				let penalty_percentages = PenaltyLevels::<T>::get();
+
+				penalty_percentage = penalty_percentages[&account_info.penalty_level];
+			}
+
+			let actual_amount = penalty_percentage * amount / BalanceOf::<T>::from(10000u32);
+
+			actual_amount
 		}
 	}
 }

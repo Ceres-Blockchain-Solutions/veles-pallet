@@ -141,6 +141,115 @@ fn update_vote_pass_ratio_ok() {
 }
 
 #[test]
+fn update_penalty_levels_unauthorized() {
+	new_test_ext().execute_with(|| {
+		// Go past genesis block so events get deposited
+		run_to_block(1);
+
+		let mut new_penalty_levels = BTreeMap::<u8, BalanceOf<Test>>::new();
+		new_penalty_levels.insert(0, 10000);
+		new_penalty_levels.insert(1, 10000);
+		new_penalty_levels.insert(2, 10000);
+		new_penalty_levels.insert(3, 10000);
+		new_penalty_levels.insert(4, 10000);
+
+		// Check for Unauthorized error
+		assert_err!(
+			Veles::update_penalty_levels(RuntimeOrigin::signed(alice()), new_penalty_levels),
+			Error::<Test>::Unauthorized
+		);
+	});
+}
+
+#[test]
+fn update_penalty_levels_not_all_penalty_levels_have_been_submitted() {
+	new_test_ext().execute_with(|| {
+		// Go past genesis block so events get deposited
+		run_to_block(1);
+
+		// Insert authority account
+		let mut new_authorities = AuthorityAccounts::<Test>::get();
+		new_authorities.insert(alice());
+		
+		AuthorityAccounts::<Test>::set(new_authorities);
+
+		let mut new_penalty_levels = BTreeMap::<u8, BalanceOf<Test>>::new();
+		new_penalty_levels.insert(0, 10000);
+		new_penalty_levels.insert(1, 10000);
+		new_penalty_levels.insert(2, 10000);
+		new_penalty_levels.insert(3, 10000);
+
+		// Check for NotAllPenaltyLevelsHaveBeenSubmitted error
+		assert_err!(
+			Veles::update_penalty_levels(RuntimeOrigin::signed(alice()), new_penalty_levels),
+			Error::<Test>::NotAllPenaltyLevelsHaveBeenSubmitted
+		);
+	});
+}
+
+#[test]
+fn update_penalty_levels_invalid_penalty_level_value() {
+	new_test_ext().execute_with(|| {
+		// Go past genesis block so events get deposited
+		run_to_block(1);
+
+		// Insert authority account
+		let mut new_authorities = AuthorityAccounts::<Test>::get();
+		new_authorities.insert(alice());
+		
+		AuthorityAccounts::<Test>::set(new_authorities);
+
+		let mut new_penalty_levels = BTreeMap::<u8, BalanceOf<Test>>::new();
+		new_penalty_levels.insert(0, 9000);
+		new_penalty_levels.insert(1, 12500);
+		new_penalty_levels.insert(2, 25000);
+		new_penalty_levels.insert(3, 35200);
+		new_penalty_levels.insert(4, 35250);
+
+		// Check for InvalidPenaltyLevelValue error
+		assert_err!(
+			Veles::update_penalty_levels(RuntimeOrigin::signed(alice()), new_penalty_levels),
+			Error::<Test>::InvalidPenaltyLevelValue
+		);
+	});
+}
+
+#[test]
+fn update_penalty_levels_ok() {
+	new_test_ext().execute_with(|| {
+		// Go past genesis block so events get deposited
+		run_to_block(1);
+
+		// Insert authority account
+		let mut new_authorities = AuthorityAccounts::<Test>::get();
+		new_authorities.insert(alice());
+		
+		AuthorityAccounts::<Test>::set(new_authorities);
+
+		let mut new_penalty_levels = BTreeMap::<u8, BalanceOf<Test>>::new();
+		new_penalty_levels.insert(0, 10000);
+		new_penalty_levels.insert(1, 12500);
+		new_penalty_levels.insert(2, 25000);
+		new_penalty_levels.insert(3, 35200);
+		new_penalty_levels.insert(4, 36050);
+
+		// Successfully update penalty levels
+		assert_ok!(
+			Veles::update_penalty_levels(RuntimeOrigin::signed(alice()), new_penalty_levels)
+		);
+
+		// Check if penalty values match
+		let penalty_levels = PenaltyLevels::<Test>::get();
+
+		assert_eq!(penalty_levels[&0], BalanceOf::<Test>::from(10000u32));
+		assert_eq!(penalty_levels[&1], BalanceOf::<Test>::from(12500u32));
+		assert_eq!(penalty_levels[&2], BalanceOf::<Test>::from(25000u32));
+		assert_eq!(penalty_levels[&3], BalanceOf::<Test>::from(35200u32));
+		assert_eq!(penalty_levels[&4], BalanceOf::<Test>::from(36050u32));
+	});
+}
+
+#[test]
 fn update_time_value_unauthorized() {
 	new_test_ext().execute_with(|| {
 		// Go past genesis block so events get deposited
