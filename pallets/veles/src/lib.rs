@@ -2708,7 +2708,7 @@ pub mod pallet {
 			let mut counter: u64 = 0;
 
 			if VotingTimeouts::<T>::contains_key(now) {
-				let timeout_events: BTreeSet<BoundedString<T::IPFSLength>> =
+				let timeout_events =
 					VotingTimeouts::<T>::get(now).unwrap();
 
 				for ipfs in timeout_events.iter() {
@@ -2766,7 +2766,7 @@ pub mod pallet {
 
 					// Update seller holdings
 					let mut seller_holdings =
-						CarbonCreditHoldings::<T>::get(sale_hash, sale_order.clone().seller)
+						CarbonCreditHoldings::<T>::get(sale_order.batch_hash, sale_order.clone().seller)
 							.unwrap();
 
 					seller_holdings = CarbonCreditHoldingsInfo {
@@ -2777,7 +2777,7 @@ pub mod pallet {
 					};
 
 					CarbonCreditHoldings::<T>::insert(
-						sale_hash,
+						sale_order.batch_hash,
 						sale_order.seller,
 						seller_holdings,
 					);
@@ -2785,6 +2785,8 @@ pub mod pallet {
 					counter += 1;
 				}
 			}
+
+			SaleOrderTimeouts::<T>::remove(&now);
 
 			T::DbWeight::get()
 				.reads(counter)
@@ -3048,15 +3050,11 @@ pub mod pallet {
 				Projects::<T>::insert(proposal.project_hash, new_project);
 			}
 
-			// Create new proposal
+			// Update proposal
 			// Note: Only change is made to the voting_active cycle status
 			let new_proposal = ProjectProposalInfo {
-				project_owner: proposal.project_owner.clone(),
-				creation_date: proposal.creation_date,
-				project_hash: proposal.project_hash,
-				votes_for: proposal.votes_for,
-				votes_against: proposal.votes_against,
 				voting_active: false,
+				..proposal
 			};
 
 			// Save new proposal
@@ -3109,14 +3107,8 @@ pub mod pallet {
 			// Create new proposal
 			// Note: Only change is made to the voting_active cycle status
 			let new_proposal = CarbonCreditBatchProposalInfo {
-				project_hash: proposal.project_hash,
-				batch_hash: proposal.batch_hash,
-				creation_date: proposal.creation_date,
-				credit_amount: proposal.credit_amount,
-				penalty_repay_price: proposal.penalty_repay_price,
-				votes_for: proposal.votes_for,
-				votes_against: proposal.votes_against,
 				voting_active: false,
+				..proposal
 			};
 
 			// Save new proposal
@@ -3426,14 +3418,21 @@ pub mod pallet {
 		pub fn has_vote_passed(total_votes: u16, votes_for: u16) -> bool {
 			let vote_pass_ratio = VotePassRatio::<T>::get();
 
-			if vote_pass_ratio.upper_limit_part == 0 && votes_for >= total_votes - votes_for + 1 {
-				return true;
+			if vote_pass_ratio.upper_limit_part == 0 {
+				if votes_for > total_votes - votes_for {
+					return true;
+				} else {
+					return false;
+				}
 			}
 
 			if vote_pass_ratio.upper_limit_part == vote_pass_ratio.proportion_part
-				&& votes_for == total_votes
 			{
-				return true;
+				if votes_for == total_votes {
+					return true;
+				} else {
+					return false;
+				}
 			}
 
 			let needed_votes =
