@@ -251,6 +251,144 @@ fn update_penalty_levels_ok() {
 }
 
 #[test]
+fn update_beneficiary_splits_unauthorized() {
+	new_test_ext().execute_with(|| {
+		// Go past genesis block so events get deposited
+		run_to_block(1);
+
+		let mut new_beneficiary_splits = BTreeMap::<u8, BalanceOf<Test>>::new();
+		new_beneficiary_splits.insert(0, 5000);
+		new_beneficiary_splits.insert(1, 2500);
+		new_beneficiary_splits.insert(2, 2500);
+
+		// Check for Unauthorized error
+		assert_err!(
+			Veles::update_beneficiary_splits(
+				RuntimeOrigin::signed(alice()),
+				new_beneficiary_splits
+			),
+			Error::<Test>::Unauthorized
+		);
+	});
+}
+
+#[test]
+fn update_beneficiary_splits_invalid_beneficiary_split_values() {
+	new_test_ext().execute_with(|| {
+		// Go past genesis block so events get deposited
+		run_to_block(1);
+
+		// Insert authority account
+		let mut new_authorities = AuthorityAccounts::<Test>::get();
+		new_authorities.insert(alice());
+
+		AuthorityAccounts::<Test>::set(new_authorities);
+
+		let mut new_beneficiary_splits = BTreeMap::<u8, BalanceOf<Test>>::new();
+		new_beneficiary_splits.insert(0, 5000);
+		new_beneficiary_splits.insert(1, 2500);
+		new_beneficiary_splits.insert(2, 2500);
+		new_beneficiary_splits.insert(3, 2500);
+
+		// Check for InvalidBeneficiarySplitValues error
+		assert_err!(
+			Veles::update_beneficiary_splits(
+				RuntimeOrigin::signed(alice()),
+				new_beneficiary_splits
+			),
+			Error::<Test>::InvalidBeneficiarySplitValues
+		);
+	});
+}
+
+#[test]
+fn update_beneficiary_splits_invalid_primary_sale_beneficiary_split() {
+	new_test_ext().execute_with(|| {
+		// Go past genesis block so events get deposited
+		run_to_block(1);
+
+		// Insert authority account
+		let mut new_authorities = AuthorityAccounts::<Test>::get();
+		new_authorities.insert(alice());
+
+		AuthorityAccounts::<Test>::set(new_authorities);
+
+		let mut new_beneficiary_splits = BTreeMap::<u8, BalanceOf<Test>>::new();
+		new_beneficiary_splits.insert(0, 5001);
+		new_beneficiary_splits.insert(1, 2500);
+		new_beneficiary_splits.insert(2, 2500);
+
+		// Check for InvalidPrimarySaleBeneficiarySplit error
+		assert_err!(
+			Veles::update_beneficiary_splits(
+				RuntimeOrigin::signed(alice()),
+				new_beneficiary_splits
+			),
+			Error::<Test>::InvalidPrimarySaleBeneficiarySplit
+		);
+	});
+}
+
+#[test]
+fn update_beneficiary_splits_invalid_secondary_sale_beneficiary_split() {
+	new_test_ext().execute_with(|| {
+		// Go past genesis block so events get deposited
+		run_to_block(1);
+
+		// Insert authority account
+		let mut new_authorities = AuthorityAccounts::<Test>::get();
+		new_authorities.insert(alice());
+
+		AuthorityAccounts::<Test>::set(new_authorities);
+
+		let mut new_beneficiary_splits = BTreeMap::<u8, BalanceOf<Test>>::new();
+		new_beneficiary_splits.insert(0, 5000);
+		new_beneficiary_splits.insert(1, 2500);
+		new_beneficiary_splits.insert(2, 2501);
+
+		// Check for InvalidSecondarySaleBeneficiarySplit error
+		assert_err!(
+			Veles::update_beneficiary_splits(
+				RuntimeOrigin::signed(alice()),
+				new_beneficiary_splits
+			),
+			Error::<Test>::InvalidSecondarySaleBeneficiarySplit
+		);
+	});
+}
+
+#[test]
+fn update_beneficiary_splits_ok() {
+	new_test_ext().execute_with(|| {
+		// Go past genesis block so events get deposited
+		run_to_block(1);
+
+		// Insert authority account
+		let mut new_authorities = AuthorityAccounts::<Test>::get();
+		new_authorities.insert(alice());
+
+		AuthorityAccounts::<Test>::set(new_authorities);
+
+		let mut new_beneficiary_splits = BTreeMap::<u8, BalanceOf<Test>>::new();
+		new_beneficiary_splits.insert(0, 5000);
+		new_beneficiary_splits.insert(1, 2500);
+		new_beneficiary_splits.insert(2, 2500);
+
+		// Successfully update beneficiary splits
+		assert_ok!(Veles::update_beneficiary_splits(
+			RuntimeOrigin::signed(alice()),
+			new_beneficiary_splits
+		));
+
+		let beneficiary_splits = BeneficiarySplits::<Test>::get();
+
+		assert_eq!(beneficiary_splits[&0], BalanceOf::<Test>::from(5000u32));
+		assert_eq!(beneficiary_splits[&1], BalanceOf::<Test>::from(2500u32));
+		assert_eq!(beneficiary_splits[&2], BalanceOf::<Test>::from(2500u32));
+	});
+}
+
+#[test]
 fn update_time_value_unauthorized() {
 	new_test_ext().execute_with(|| {
 		// Go past genesis block so events get deposited
@@ -3046,6 +3184,7 @@ fn create_sale_order_carbon_credit_batch_is_not_active() {
 			credit_amount: BalanceOf::<Test>::from(1u32),
 			penalty_repay_price: BalanceOf::<Test>::from(1u32),
 			status: CarbonCreditBatchStatus::Frozen,
+			validator_benefactors: BTreeSet::<AccountIdOf<Test>>::new(),
 		};
 
 		let batch_hash = generate_hash(alice());
@@ -3093,6 +3232,7 @@ fn create_sale_order_carbon_credit_holdings_dont_exist() {
 			credit_amount: BalanceOf::<Test>::from(1u32),
 			penalty_repay_price: BalanceOf::<Test>::from(1000u32),
 			status: CarbonCreditBatchStatus::Active,
+			validator_benefactors: BTreeSet::<AccountIdOf<Test>>::new(),
 		};
 
 		let batch_hash = generate_hash(alice());
@@ -3140,6 +3280,7 @@ fn create_sale_order_not_enought_available_credits() {
 			credit_amount: BalanceOf::<Test>::from(100u32),
 			penalty_repay_price: BalanceOf::<Test>::from(1u32),
 			status: CarbonCreditBatchStatus::Active,
+			validator_benefactors: BTreeSet::<AccountIdOf<Test>>::new(),
 		};
 
 		let batch_hash = generate_hash(alice());
@@ -3195,6 +3336,7 @@ fn create_sale_order_ok() {
 			credit_amount: BalanceOf::<Test>::from(100u32),
 			penalty_repay_price: BalanceOf::<Test>::from(1u32),
 			status: CarbonCreditBatchStatus::Active,
+			validator_benefactors: BTreeSet::<AccountIdOf<Test>>::new(),
 		};
 
 		let batch_hash = generate_hash(alice());
@@ -3420,6 +3562,7 @@ fn complete_sale_order_carbon_credit_batch_is_not_active() {
 			credit_amount: BalanceOf::<Test>::from(100u32),
 			penalty_repay_price: BalanceOf::<Test>::from(10u32),
 			status: CarbonCreditBatchStatus::Frozen,
+			validator_benefactors: BTreeSet::<AccountIdOf<Test>>::new(),
 		};
 
 		let batch_hash = generate_hash(alice());
@@ -3471,6 +3614,7 @@ fn complete_sale_order_insufficient_funds() {
 			credit_amount: BalanceOf::<Test>::from(100u32),
 			penalty_repay_price: BalanceOf::<Test>::from(10u32),
 			status: CarbonCreditBatchStatus::Active,
+			validator_benefactors: BTreeSet::<AccountIdOf<Test>>::new(),
 		};
 
 		let batch_hash = generate_hash(alice());
@@ -3512,19 +3656,62 @@ fn complete_sale_order_ok() {
 
 		TraderAccounts::<Test>::set(traders);
 
+		// Insert validators
+		let validator_1 = ProjectValidatorOrProjectOwnerInfo {
+			documentation_ipfs: BoundedString::<IPFSLength>::truncate_from("validator_1"),
+			penalty_level: 0,
+			penalty_timeout: 0,
+		};
+
+		let validator_2 = ProjectValidatorOrProjectOwnerInfo {
+			documentation_ipfs: BoundedString::<IPFSLength>::truncate_from("validator_2"),
+			penalty_level: 0,
+			penalty_timeout: 0,
+		};
+
+		Validators::<Test>::insert(dave(), validator_1);
+		Validators::<Test>::insert(fred(), validator_2);
+
+		// Insert project owner
+		let owner = ProjectValidatorOrProjectOwnerInfo {
+			documentation_ipfs: BoundedString::<IPFSLength>::truncate_from("owner"),
+			penalty_level: 0,
+			penalty_timeout: 0,
+		};
+
+		ProjectOwners::<Test>::insert(alice(), owner);
+
+		// Insert project
+		let project = ProjectInfo {
+			documentation_ipfs: BoundedString::<IPFSLength>::truncate_from("project"),
+			project_owner: alice(),
+			creation_date: <mock::Test as pallet::Config>::Time::now(),
+			penalty_level: 0,
+			penalty_timeout: 0,
+		};
+		
+		let project_hash = generate_hash(alice());
+
+		Projects::<Test>::insert(project_hash, project);
+
 		// Insert carbon credit batch
+		let mut validator_benefactors = BTreeSet::<AccountIdOf<Test>>::new();
+		validator_benefactors.insert(dave());
+		validator_benefactors.insert(fred());
+
 		let credit_batch = CarbonCreditBatchInfo {
 			documentation_ipfs: BoundedString::<IPFSLength>::truncate_from(
-				"batch_documentation_ipfs",
+				"batch",
 			),
-			project_hash: generate_hash(charlie()),
+			project_hash: project_hash,
 			creation_date: <mock::Test as pallet::Config>::Time::now(),
 			credit_amount: BalanceOf::<Test>::from(100u32),
 			penalty_repay_price: BalanceOf::<Test>::from(10u32),
 			status: CarbonCreditBatchStatus::Active,
+			validator_benefactors: validator_benefactors,
 		};
 
-		let batch_hash = generate_hash(alice());
+		let batch_hash = generate_hash(bob());
 
 		CarbonCreditBatches::<Test>::insert(batch_hash, credit_batch);
 
@@ -3592,8 +3779,11 @@ fn complete_sale_order_ok() {
 		assert_eq!(sale_timeouts, None);
 
 		// Check balances after extrinsic call
-		assert_eq!(pallet_balances::Pallet::<Test>::free_balance(charlie()), 4950);
-		assert_eq!(pallet_balances::Pallet::<Test>::free_balance(bob()), 150);
+		assert_eq!(pallet_balances::Pallet::<Test>::free_balance(charlie()), 4951);
+		assert_eq!(pallet_balances::Pallet::<Test>::free_balance(bob()), 128);
+		assert_eq!(pallet_balances::Pallet::<Test>::free_balance(dave()), 8);
+		assert_eq!(pallet_balances::Pallet::<Test>::free_balance(fred()), 8);
+		assert_eq!(pallet_balances::Pallet::<Test>::free_balance(alice()), 6);
 	});
 }
 
@@ -3798,6 +3988,7 @@ fn close_sale_order_ok() {
 			credit_amount: BalanceOf::<Test>::from(100u32),
 			penalty_repay_price: BalanceOf::<Test>::from(10u32),
 			status: CarbonCreditBatchStatus::Active,
+			validator_benefactors: BTreeSet::<AccountIdOf<Test>>::new(),
 		};
 
 		let batch_hash = generate_hash(alice());
@@ -4079,6 +4270,7 @@ fn open_account_complaint_project_owner_ok() {
 			credit_amount: BalanceOf::<Test>::from(100u32),
 			penalty_repay_price: BalanceOf::<Test>::from(5u32),
 			status: CarbonCreditBatchStatus::Active,
+			validator_benefactors: BTreeSet::<AccountIdOf<Test>>::new(),
 		};
 
 		let batch_hash = generate_hash(bob());
@@ -4519,6 +4711,7 @@ fn open_hash_complaint_project_max_potential_penalty_level_exceeded() {
 			credit_amount: BalanceOf::<Test>::from(100u32),
 			penalty_repay_price: BalanceOf::<Test>::from(5u32),
 			status: CarbonCreditBatchStatus::Active,
+			validator_benefactors: BTreeSet::<AccountIdOf<Test>>::new(),
 		};
 
 		let batch_hash = generate_hash(bob());
@@ -4598,6 +4791,7 @@ fn open_hash_complaint_project_ok() {
 			credit_amount: BalanceOf::<Test>::from(100u32),
 			penalty_repay_price: BalanceOf::<Test>::from(5u32),
 			status: CarbonCreditBatchStatus::Active,
+			validator_benefactors: BTreeSet::<AccountIdOf<Test>>::new(),
 		};
 
 		let batch_hash = generate_hash(bob());
@@ -4689,6 +4883,7 @@ fn open_hash_complaint_batch_ongoing_carbon_batch_complaint() {
 			credit_amount: BalanceOf::<Test>::from(100u32),
 			penalty_repay_price: BalanceOf::<Test>::from(5u32),
 			status: CarbonCreditBatchStatus::Active,
+			validator_benefactors: BTreeSet::<AccountIdOf<Test>>::new(),
 		};
 
 		let batch_hash = generate_hash(bob());
@@ -4755,6 +4950,7 @@ fn open_hash_complaint_batch_ok() {
 			credit_amount: BalanceOf::<Test>::from(100u32),
 			penalty_repay_price: BalanceOf::<Test>::from(5u32),
 			status: CarbonCreditBatchStatus::Active,
+			validator_benefactors: BTreeSet::<AccountIdOf<Test>>::new(),
 		};
 
 		let batch_hash = generate_hash(bob());
@@ -4907,6 +5103,7 @@ fn retire_carbon_credits_carbon_credit_batch_is_not_active() {
 			credit_amount: BalanceOf::<Test>::from(200u32),
 			penalty_repay_price: BalanceOf::<Test>::from(20u32),
 			status: CarbonCreditBatchStatus::Frozen,
+			validator_benefactors: BTreeSet::<AccountIdOf<Test>>::new(),
 		};
 
 		let batch_hash = generate_hash(alice());
@@ -4960,6 +5157,7 @@ fn retire_carbon_credits_carbon_credit_holdings_dont_exist() {
 			credit_amount: BalanceOf::<Test>::from(200u32),
 			penalty_repay_price: BalanceOf::<Test>::from(20u32),
 			status: CarbonCreditBatchStatus::Active,
+			validator_benefactors: BTreeSet::<AccountIdOf<Test>>::new(),
 		};
 
 		let batch_hash = generate_hash(alice());
@@ -5013,6 +5211,7 @@ fn retire_carbon_credits_not_enought_available_credits() {
 			credit_amount: BalanceOf::<Test>::from(200u32),
 			penalty_repay_price: BalanceOf::<Test>::from(20u32),
 			status: CarbonCreditBatchStatus::Active,
+			validator_benefactors: BTreeSet::<AccountIdOf<Test>>::new(),
 		};
 
 		let batch_hash = generate_hash(alice());
@@ -5074,6 +5273,7 @@ fn retire_carbon_credits_ok() {
 			credit_amount: BalanceOf::<Test>::from(200u32),
 			penalty_repay_price: BalanceOf::<Test>::from(20u32),
 			status: CarbonCreditBatchStatus::Active,
+			validator_benefactors: BTreeSet::<AccountIdOf<Test>>::new(),
 		};
 
 		let batch_hash = generate_hash(alice());

@@ -127,8 +127,13 @@ pub struct ProjectInfo<IPFSLength: Get<u32>, AccountIdOf, MomentOf, BlockNumber>
 #[derive(Encode, Decode, Clone, PartialEq, Eq, scale_info::TypeInfo)]
 #[cfg_attr(feature = "std", derive(Debug))]
 #[scale_info(skip_type_params(IPFSLength))]
-pub struct CarbonCreditBatchInfo<IPFSLength: Get<u32>, MomentOf, BalanceOf, CarbonCreditBatchStatus>
-{
+pub struct CarbonCreditBatchInfo<
+	IPFSLength: Get<u32>,
+	MomentOf,
+	BalanceOf,
+	CarbonCreditBatchStatus,
+	AccountId,
+> {
 	// IPFS link to CFA documentation
 	documentation_ipfs: BoundedString<IPFSLength>,
 	// Project hash
@@ -141,6 +146,8 @@ pub struct CarbonCreditBatchInfo<IPFSLength: Get<u32>, MomentOf, BalanceOf, Carb
 	penalty_repay_price: BalanceOf,
 	// Batch status
 	status: CarbonCreditBatchStatus,
+	// Validator benefactors
+	validator_benefactors: BTreeSet<AccountId>,
 }
 
 // Carbon credit holding info structure
@@ -453,6 +460,21 @@ pub mod pallet {
 		penalty_levels
 	}
 
+	// Default value for penalty levels
+	#[pallet::type_value]
+	pub fn DefaultForBeneficiarySplits<T: Config>() -> BTreeMap<u8, BalanceOf<T>> {
+		let mut beneficiary_splits = BTreeMap::<u8, BalanceOf<T>>::new();
+
+		// Add beneficiary percentage for validators (only initial sale)
+		beneficiary_splits.insert(0u8, BalanceOf::<T>::from(4500u32));
+		// Add beneficiary percentage for validators (only secondary sale)
+		beneficiary_splits.insert(1u8, BalanceOf::<T>::from(3500u32));
+		// Add beneficiary percentage for project owner (only secondary sale)
+		beneficiary_splits.insert(2u8, BalanceOf::<T>::from(1000u32));
+
+		beneficiary_splits
+	}
+
 	/// Pallet storages
 	// Fee values
 	#[pallet::storage]
@@ -477,6 +499,12 @@ pub mod pallet {
 	#[pallet::getter(fn penalty_levels)]
 	pub type PenaltyLevels<T: Config> =
 		StorageValue<_, BTreeMap<u8, BalanceOf<T>>, ValueQuery, DefaultForPenaltyLevels<T>>;
+
+	// Beneficiary splits
+	#[pallet::storage]
+	#[pallet::getter(fn beneficiary_splits)]
+	pub type BeneficiarySplits<T: Config> =
+		StorageValue<_, BTreeMap<u8, BalanceOf<T>>, ValueQuery, DefaultForBeneficiarySplits<T>>;
 
 	// Authority accounts
 	#[pallet::storage]
@@ -541,7 +569,13 @@ pub mod pallet {
 		_,
 		Identity,
 		H256,
-		CarbonCreditBatchInfo<T::IPFSLength, MomentOf<T>, BalanceOf<T>, CarbonCreditBatchStatus>,
+		CarbonCreditBatchInfo<
+			T::IPFSLength,
+			MomentOf<T>,
+			BalanceOf<T>,
+			CarbonCreditBatchStatus,
+			AccountIdOf<T>,
+		>,
 		OptionQuery,
 	>;
 
@@ -723,8 +757,10 @@ pub mod pallet {
 		CarbonCreditsHaveBeenRetired(AccountIdOf<T>, H256, BalanceOf<T>),
 		/// Project Owner Debts Have Been Repaid
 		ProjectOwnerDebtsHaveBeenRepaid(AccountIdOf<T>),
-		///Penalty Levels Updated
+		/// Penalty Levels Updated
 		PenaltyLevelsUpdated(BTreeMap<u8, BalanceOf<T>>),
+		/// Beneficiary Split Updated
+		BeneficiarySplitsUpdated(BTreeMap<u8, BalanceOf<T>>),
 	}
 
 	#[pallet::error]
@@ -813,6 +849,12 @@ pub mod pallet {
 		NotAllPenaltyLevelsHaveBeenSubmitted,
 		/// Invalid penalty level value
 		InvalidPenaltyLevelValue,
+		/// Invalid beneficiary split values
+		InvalidBeneficiarySplitValues,
+		/// Invalid primary sale beneficiary split
+		InvalidPrimarySaleBeneficiarySplit,
+		/// Invalid secondary sale beneficiary split
+		InvalidSecondarySaleBeneficiarySplit,
 	}
 
 	#[pallet::call]
@@ -903,8 +945,53 @@ pub mod pallet {
 			Ok(().into())
 		}
 
-		// Update specific time value
+		// Update beneficiary splits
 		#[pallet::call_index(2)]
+		#[pallet::weight(0)]
+		pub fn update_beneficiary_splits(
+			origin: OriginFor<T>,
+			new_beneficiary_splits: BTreeMap<u8, BalanceOf<T>>,
+		) -> DispatchResultWithPostInfo {
+			// Note: The structure of the map is as follows:
+			// 0 -> beneficiary split for validator during the initial sale
+			// 1 -> beneficiary split for validator during the secondary sale
+			// 2 -> beneficiary split for owners during the secondary sale
+
+			// Note: Beneficiary splits can't exceed 50% (either inital or secondary sale)
+
+			let user = ensure_signed(origin)?;
+
+			// Check if caller is a Authority account
+			ensure!(
+				AuthorityAccounts::<T>::get().contains(&user.clone()),
+				Error::<T>::Unauthorized
+			);
+
+			// Check if the user submitted an adequate beneficiary split map
+			ensure!(new_beneficiary_splits.len() == 3, Error::<T>::InvalidBeneficiarySplitValues);
+
+			// Check if the primary sale beneficiary split (for validators) exceeds 50%
+			ensure!(
+				new_beneficiary_splits[&0] <= BalanceOf::<T>::from(5000u32),
+				Error::<T>::InvalidPrimarySaleBeneficiarySplit
+			);
+
+			// Check if the secondary sale beneficiary split (for validators and the project owner) exceeds 50%
+			ensure!(
+				new_beneficiary_splits[&1] + new_beneficiary_splits[&2]
+					<= BalanceOf::<T>::from(5000u32),
+				Error::<T>::InvalidSecondarySaleBeneficiarySplit
+			);
+
+			BeneficiarySplits::<T>::set(new_beneficiary_splits.clone());
+
+			Self::deposit_event(Event::BeneficiarySplitsUpdated(new_beneficiary_splits));
+
+			Ok(().into())
+		}
+
+		// Update specific time value
+		#[pallet::call_index(3)]
 		#[pallet::weight(0)]
 		pub fn update_time_value(
 			origin: OriginFor<T>,
@@ -978,7 +1065,7 @@ pub mod pallet {
 		}
 
 		// Update specific fee value
-		#[pallet::call_index(3)]
+		#[pallet::call_index(4)]
 		#[pallet::weight(0)]
 		pub fn update_fee_value(
 			origin: OriginFor<T>,
@@ -1075,7 +1162,7 @@ pub mod pallet {
 		}
 
 		// Register for a trader account
-		#[pallet::call_index(4)]
+		#[pallet::call_index(5)]
 		#[pallet::weight(0)]
 		pub fn register_for_trader_account(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
 			let user = ensure_signed(origin)?;
@@ -1116,7 +1203,7 @@ pub mod pallet {
 		}
 
 		// Register for a project validator account
-		#[pallet::call_index(5)]
+		#[pallet::call_index(6)]
 		#[pallet::weight(0)]
 		pub fn register_for_project_validator_account(
 			origin: OriginFor<T>,
@@ -1173,7 +1260,7 @@ pub mod pallet {
 		}
 
 		// Register for a project owner account
-		#[pallet::call_index(6)]
+		#[pallet::call_index(7)]
 		#[pallet::weight(0)]
 		pub fn register_for_project_owner_account(
 			origin: OriginFor<T>,
@@ -1230,7 +1317,7 @@ pub mod pallet {
 		}
 
 		// Submit carbon footprint report
-		#[pallet::call_index(7)]
+		#[pallet::call_index(8)]
 		#[pallet::weight(0)]
 		pub fn submit_carbon_footprint_report(
 			origin: OriginFor<T>,
@@ -1317,7 +1404,7 @@ pub mod pallet {
 		}
 
 		// Vote for/against Carbon Deficit Reports or for/against project Proposals
-		#[pallet::call_index(8)]
+		#[pallet::call_index(9)]
 		#[pallet::weight(0)]
 		pub fn cast_vote(
 			origin: OriginFor<T>,
@@ -1477,7 +1564,7 @@ pub mod pallet {
 		}
 
 		// Propose project
-		#[pallet::call_index(9)]
+		#[pallet::call_index(10)]
 		#[pallet::weight(0)]
 		pub fn propose_project(
 			origin: OriginFor<T>,
@@ -1565,7 +1652,7 @@ pub mod pallet {
 		}
 
 		// Propose carbon credit batch
-		#[pallet::call_index(10)]
+		#[pallet::call_index(11)]
 		#[pallet::weight(0)]
 		pub fn propose_carbon_credit_batch(
 			origin: OriginFor<T>,
@@ -1665,7 +1752,7 @@ pub mod pallet {
 		}
 
 		// Create carbon credit sale order
-		#[pallet::call_index(11)]
+		#[pallet::call_index(12)]
 		#[pallet::weight(0)]
 		pub fn create_sale_order(
 			origin: OriginFor<T>,
@@ -1777,7 +1864,7 @@ pub mod pallet {
 		}
 
 		// Complete sale order (buy carbon credits)
-		#[pallet::call_index(12)]
+		#[pallet::call_index(13)]
 		#[pallet::weight(0)]
 		pub fn complete_sale_order(
 			origin: OriginFor<T>,
@@ -1825,14 +1912,47 @@ pub mod pallet {
 			);
 
 			// Check if the buyer has enough assets
-			let amount_to_pay = sale_order.credit_amount * sale_order.credit_price;
+			let mut amount_to_pay = sale_order.credit_amount * sale_order.credit_price;
 
 			ensure!(
 				amount_to_pay <= T::Currency::free_balance(&buyer.clone()),
 				Error::<T>::InsufficientFunds
 			);
 
-			// TODO: Implement profit splitting
+			let project = Projects::<T>::get(carbon_credit_batch.project_hash).unwrap();
+
+			let beneficiary_splits = BeneficiarySplits::<T>::get();
+
+			if project.project_owner == sale_order.seller {
+				// Do primary beneficiary split
+				let validator_gains =
+					amount_to_pay * beneficiary_splits[&0] / BalanceOf::<T>::from(10000u32);
+
+				Self::process_validator_gains(
+					buyer.clone(),
+					carbon_credit_batch.validator_benefactors,
+					validator_gains,
+				);
+
+				amount_to_pay -= validator_gains;
+			} else {
+				// Do secondary beneficiary split
+				let validator_gains =
+					amount_to_pay * beneficiary_splits[&1] / BalanceOf::<T>::from(10000u32);
+				let owner_gains =
+					amount_to_pay * beneficiary_splits[&2] / BalanceOf::<T>::from(10000u32);
+
+				Self::process_validator_gains(
+					buyer.clone(),
+					carbon_credit_batch.validator_benefactors,
+					validator_gains,
+				);
+
+				Self::process_owner_gains(buyer.clone(), project.project_owner, owner_gains);
+
+				amount_to_pay -= validator_gains;
+				amount_to_pay -= owner_gains;
+			}
 
 			// Transfer funds
 			T::Currency::transfer(
@@ -1914,7 +2034,7 @@ pub mod pallet {
 		}
 
 		// Close carbon credit sale order
-		#[pallet::call_index(13)]
+		#[pallet::call_index(14)]
 		#[pallet::weight(0)]
 		pub fn close_sale_order(
 			origin: OriginFor<T>,
@@ -1994,7 +2114,7 @@ pub mod pallet {
 		}
 
 		// Open complaint (for AccountId entity)
-		#[pallet::call_index(14)]
+		#[pallet::call_index(15)]
 		#[pallet::weight(0)]
 		pub fn open_account_complaint(
 			origin: OriginFor<T>,
@@ -2102,7 +2222,7 @@ pub mod pallet {
 		}
 
 		// Open complaint (for hash entity)
-		#[pallet::call_index(15)]
+		#[pallet::call_index(16)]
 		#[pallet::weight(0)]
 		pub fn open_hash_complaint(
 			origin: OriginFor<T>,
@@ -2229,7 +2349,7 @@ pub mod pallet {
 		}
 
 		// Retire carbon credits (only for CFAs)
-		#[pallet::call_index(16)]
+		#[pallet::call_index(17)]
 		#[pallet::weight(0)]
 		pub fn retire_carbon_credits(
 			origin: OriginFor<T>,
@@ -2336,7 +2456,7 @@ pub mod pallet {
 		// Repay project owner debts (only for project owners)
 		// Note: This extrinsic will not user the penalties to calculate the amout that
 		// 		 is needed for the repayment
-		#[pallet::call_index(17)]
+		#[pallet::call_index(18)]
 		#[pallet::weight(0)]
 		pub fn repay_project_owner_debts(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
 			let project_owner = ensure_signed(origin)?;
@@ -2963,6 +3083,7 @@ pub mod pallet {
 					credit_amount: proposal.credit_amount,
 					penalty_repay_price: proposal.penalty_repay_price,
 					status: CarbonCreditBatchStatus::Active,
+					validator_benefactors: proposal.votes_for.clone(),
 				};
 
 				// Save new carbon credit batch
@@ -3518,6 +3639,105 @@ pub mod pallet {
 			let actual_amount = penalty_percentage * amount / BalanceOf::<T>::from(10000u32);
 
 			actual_amount
+		}
+
+		// Calculate gains penalties for a specific account
+		pub fn calculate_gains_penalties(
+			account_id: AccountIdOf<T>,
+			amount: BalanceOf<T>,
+		) -> BalanceOf<T> {
+			let mut penalized_gains = BalanceOf::<T>::from(0u32);
+
+			let penalty_values = PenaltyLevels::<T>::get();
+
+			if ProjectOwners::<T>::contains_key(account_id.clone()) {
+				let project_owner = ProjectOwners::<T>::get(account_id.clone()).unwrap();
+
+				penalized_gains = amount * BalanceOf::<T>::from(10000u32)
+					/ penalty_values[&project_owner.penalty_level];
+			}
+
+			if Validators::<T>::contains_key(account_id.clone()) {
+				let validator = Validators::<T>::get(account_id).unwrap();
+
+				penalized_gains = amount * BalanceOf::<T>::from(10000u32)
+					/ penalty_values[&validator.penalty_level];
+			}
+
+			penalized_gains
+		}
+
+		// Process validator gains from benefctor split during a carbon credit sale
+		pub fn process_validator_gains(
+			buyer: AccountIdOf<T>,
+			validator_benefactors: BTreeSet<AccountIdOf<T>>,
+			validator_gains: BalanceOf<T>,
+		) {
+			let num_of_validator_benefactors: u32 = validator_benefactors.len().try_into().unwrap();
+
+			let gains_per_validator =
+				validator_gains / BalanceOf::<T>::from(num_of_validator_benefactors);
+
+			for validator in validator_benefactors.iter() {
+				let validator_gains =
+					Self::calculate_gains_penalties(validator.clone(), gains_per_validator);
+
+				// Transfer funds
+				T::Currency::transfer(
+					&buyer,
+					&validator,
+					validator_gains,
+					ExistenceRequirement::KeepAlive,
+				)
+				.unwrap();
+
+				let remainder = gains_per_validator - validator_gains;
+
+				if remainder != BalanceOf::<T>::from(0u32) {
+					continue;
+				}
+
+				// Transfer funds
+				T::Currency::transfer(
+					&buyer,
+					&Self::pallet_id(),
+					remainder,
+					ExistenceRequirement::KeepAlive,
+				)
+				.unwrap();
+			}
+		}
+
+		// Process project owner gains from benefactor split during a carbon credit sale
+		pub fn process_owner_gains(
+			buyer: AccountIdOf<T>,
+			project_owner: AccountIdOf<T>,
+			owner_gains: BalanceOf<T>,
+		) {
+			let real_owner_gains =
+				Self::calculate_gains_penalties(project_owner.clone(), owner_gains);
+
+			// Transfer funds
+			T::Currency::transfer(
+				&buyer,
+				&project_owner,
+				real_owner_gains,
+				ExistenceRequirement::KeepAlive,
+			)
+			.unwrap();
+
+			let remainder = owner_gains - real_owner_gains;
+
+			if remainder != BalanceOf::<T>::from(0u32) {
+				// Transfer funds
+				T::Currency::transfer(
+					&buyer,
+					&Self::pallet_id(),
+					remainder,
+					ExistenceRequirement::KeepAlive,
+				)
+				.unwrap();
+			}
 		}
 	}
 }

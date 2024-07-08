@@ -42,6 +42,14 @@ pub fn charlie() -> AccountId {
 	AccountId::from([3u8; 32])
 }
 
+pub fn dave() -> AccountId {
+	AccountId::from([4u8; 32])
+}
+
+pub fn fred() -> AccountId {
+	AccountId::from([5u8; 32])
+}
+
 pub fn generate_hash(user: AccountId) -> H256 {
 	let nonce = frame_system::Pallet::<Test>::account_nonce(&user);
 	let now = <mock::Test as pallet::Config>::Time::now();
