@@ -2,65 +2,6 @@ use crate::{mock::*, Error};
 use frame_support::{assert_err, assert_ok};
 
 #[test]
-fn update_base_pallet_time_zero_ok() {
-	new_test_ext().execute_with(|| {
-		// Check for base pallet time before block 1
-		let base_pallet_time = PalletTimeValues::<Test>::get().pallet_base_time;
-
-		assert_eq!(base_pallet_time, 0);
-
-		// Go past genesis block so events get deposited
-		run_to_block(1);
-
-		// Check for base pallet time on block 1
-		let base_pallet_time = PalletTimeValues::<Test>::get().pallet_base_time;
-
-		assert_eq!(base_pallet_time, 1);
-
-		// Go to block 10
-		run_to_block(10);
-
-		// Check for base pallet time on block 10
-		let base_pallet_time = PalletTimeValues::<Test>::get().pallet_base_time;
-
-		assert_eq!(base_pallet_time, 1);
-	});
-}
-
-#[test]
-fn update_base_pallet_time_new_year_ok() {
-	new_test_ext().execute_with(|| {
-		// Check for base pallet time before block 1
-		let base_pallet_time = PalletTimeValues::<Test>::get().pallet_base_time;
-
-		assert_eq!(base_pallet_time, 0);
-
-		// Go past genesis block so events get deposited
-		run_to_block(1);
-
-		// Check for base pallet time on block 1
-		let base_pallet_time = PalletTimeValues::<Test>::get().pallet_base_time;
-
-		assert_eq!(base_pallet_time, 1);
-
-		// Set number of block yearly
-		let mut pallet_time_values = PalletTimeValues::<Test>::get();
-
-		pallet_time_values = TimeValues { number_of_blocks_per_year: 100, ..pallet_time_values };
-
-		PalletTimeValues::<Test>::set(pallet_time_values);
-
-		// Go to block 110
-		run_to_block(110);
-
-		// Check for base pallet time on block 10
-		let base_pallet_time = PalletTimeValues::<Test>::get().pallet_base_time;
-
-		assert_eq!(base_pallet_time, 101);
-	});
-}
-
-#[test]
 fn update_vote_pass_ratio_unauthorized() {
 	new_test_ext().execute_with(|| {
 		// Go past genesis block so events get deposited
@@ -3689,7 +3630,7 @@ fn complete_sale_order_ok() {
 			penalty_level: 0,
 			penalty_timeout: 0,
 		};
-		
+
 		let project_hash = generate_hash(alice());
 
 		Projects::<Test>::insert(project_hash, project);
@@ -3700,15 +3641,13 @@ fn complete_sale_order_ok() {
 		validator_benefactors.insert(fred());
 
 		let credit_batch = CarbonCreditBatchInfo {
-			documentation_ipfs: BoundedString::<IPFSLength>::truncate_from(
-				"batch",
-			),
-			project_hash: project_hash,
+			documentation_ipfs: BoundedString::<IPFSLength>::truncate_from("batch"),
+			project_hash,
 			creation_date: <mock::Test as pallet::Config>::Time::now(),
 			credit_amount: BalanceOf::<Test>::from(100u32),
 			penalty_repay_price: BalanceOf::<Test>::from(10u32),
 			status: CarbonCreditBatchStatus::Active,
-			validator_benefactors: validator_benefactors,
+			validator_benefactors,
 		};
 
 		let batch_hash = generate_hash(bob());
@@ -5450,5 +5389,179 @@ fn repay_project_owner_debts_ok() {
 		assert_eq!(pallet_balances::Pallet::<Test>::free_balance(charlie()), 4950);
 		assert_eq!(pallet_balances::Pallet::<Test>::free_balance(alice()), 21);
 		assert_eq!(pallet_balances::Pallet::<Test>::free_balance(bob()), 130);
+	});
+}
+
+// Utility functions tests
+
+#[test]
+pub fn has_vote_passed_ok() {
+	new_test_ext().execute_with(|| {
+		// Example 1
+		assert_eq!(Veles::has_vote_passed(6, 4), true);
+		assert_eq!(Veles::has_vote_passed(6, 1), false);
+		assert_eq!(Veles::has_vote_passed(6, 5), true);
+
+		// Example 2
+		let new_pass_ration = ProportionStructure { proportion_part: 10, upper_limit_part: 0 };
+		VotePassRatio::<Test>::set(new_pass_ration);
+
+		assert_eq!(Veles::has_vote_passed(6, 4), true);
+		assert_eq!(Veles::has_vote_passed(6, 5), true);
+		assert_eq!(Veles::has_vote_passed(3, 1), false);
+
+		// // Example 3
+		let new_pass_ration = ProportionStructure { proportion_part: 1, upper_limit_part: 1 };
+		VotePassRatio::<Test>::set(new_pass_ration);
+
+		assert_eq!(Veles::has_vote_passed(6, 4), false);
+		assert_eq!(Veles::has_vote_passed(6, 6), true);
+		assert_eq!(Veles::has_vote_passed(2, 1), false);
+	});
+}
+
+// Hook tests
+
+#[test]
+fn update_base_pallet_time_zero_ok() {
+	new_test_ext().execute_with(|| {
+		// Check for base pallet time before block 1
+		let base_pallet_time = PalletTimeValues::<Test>::get().pallet_base_time;
+
+		assert_eq!(base_pallet_time, 0);
+
+		// Go past genesis block so events get deposited
+		run_to_block(1);
+
+		// Check for base pallet time on block 1
+		let base_pallet_time = PalletTimeValues::<Test>::get().pallet_base_time;
+
+		assert_eq!(base_pallet_time, 1);
+
+		// Go to block 10
+		run_to_block(10);
+
+		// Check for base pallet time on block 10
+		let base_pallet_time = PalletTimeValues::<Test>::get().pallet_base_time;
+
+		assert_eq!(base_pallet_time, 1);
+	});
+}
+
+#[test]
+fn update_base_pallet_time_new_year_ok() {
+	new_test_ext().execute_with(|| {
+		// Check for base pallet time before block 1
+		let base_pallet_time = PalletTimeValues::<Test>::get().pallet_base_time;
+
+		assert_eq!(base_pallet_time, 0);
+
+		// Go past genesis block so events get deposited
+		run_to_block(1);
+
+		// Check for base pallet time on block 1
+		let base_pallet_time = PalletTimeValues::<Test>::get().pallet_base_time;
+
+		assert_eq!(base_pallet_time, 1);
+
+		// Set number of block yearly
+		let mut pallet_time_values = PalletTimeValues::<Test>::get();
+
+		pallet_time_values = TimeValues { number_of_blocks_per_year: 100, ..pallet_time_values };
+
+		PalletTimeValues::<Test>::set(pallet_time_values);
+
+		// Go to block 110
+		run_to_block(110);
+
+		// Check for base pallet time on block 10
+		let base_pallet_time = PalletTimeValues::<Test>::get().pallet_base_time;
+
+		assert_eq!(base_pallet_time, 101);
+	});
+}
+
+#[test]
+fn check_sale_timeouts_ok() {
+	new_test_ext().execute_with(|| {
+		// Go past genesis block so events get deposited
+		run_to_block(1);
+
+		// Insert holdings
+		let holdings_1 = CarbonCreditHoldingsInfo {
+			available_amount: BalanceOf::<Test>::from(10u32),
+			unavailable_amount: BalanceOf::<Test>::from(30u32),
+		};
+
+		let holdings_2 = CarbonCreditHoldingsInfo {
+			available_amount: BalanceOf::<Test>::from(0u32),
+			unavailable_amount: BalanceOf::<Test>::from(10u32),
+		};
+	
+		let batch_hash = generate_hash(alice());
+
+		CarbonCreditHoldings::<Test>::insert(batch_hash, alice(), holdings_1);
+		CarbonCreditHoldings::<Test>::insert(batch_hash, bob(), holdings_2);
+	
+		// Insert sale orders
+		let sale_order_1 = CarbonCreditSaleOrderInfo {
+			batch_hash: batch_hash,
+			credit_amount: BalanceOf::<Test>::from(20u32),
+			credit_price: BalanceOf::<Test>::from(5u32),
+			seller: alice(),
+			buyer: alice(),
+			sale_active: true,
+			sale_timeout: 10,
+		};
+
+		let sale_order_2 = CarbonCreditSaleOrderInfo {
+			batch_hash: batch_hash,
+			credit_amount: BalanceOf::<Test>::from(10u32),
+			credit_price: BalanceOf::<Test>::from(5u32),
+			seller: bob(),
+			buyer: bob(),
+			sale_active: true,
+			sale_timeout: 10,
+		};
+
+		let sale_hash_1 = generate_hash(dave());
+		let sale_hash_2 = generate_hash(fred());
+
+		CarbonCreditSaleOrders::<Test>::insert(sale_hash_1, sale_order_1);
+		CarbonCreditSaleOrders::<Test>::insert(sale_hash_2, sale_order_2);
+
+		// Insert sale timeouts
+		let mut sale_timeouts = BTreeSet::<H256>::new();
+		sale_timeouts.insert(sale_hash_1);
+		sale_timeouts.insert(sale_hash_2);
+
+		let sale_timeout_block = BlockNumber::<Test>::from(10u32);
+
+		SaleOrderTimeouts::<Test>::insert(sale_timeout_block, sale_timeouts);
+
+		// Run passed block 10
+		run_to_block(11);
+
+		// Check sale timeouts
+		let sale_timeout_events = SaleOrderTimeouts::<Test>::get(10);
+
+		assert_eq!(sale_timeout_events, None);
+
+		// Check sale orders
+		let sale_order_1 = CarbonCreditSaleOrders::<Test>::get(sale_hash_1).unwrap();
+		let sale_order_2 = CarbonCreditSaleOrders::<Test>::get(sale_hash_2).unwrap();
+
+		assert_eq!(sale_order_1.sale_active, false);
+		assert_eq!(sale_order_2.sale_active, false);
+		
+		// Check carbon credit holdings
+		let holdings_1 = CarbonCreditHoldings::<Test>::get(batch_hash, alice()).unwrap();
+		let holdings_2 = CarbonCreditHoldings::<Test>::get(batch_hash, bob()).unwrap();
+
+		assert_eq!(holdings_1.available_amount,  BalanceOf::<Test>::from(30u32));
+		assert_eq!(holdings_1.unavailable_amount,  BalanceOf::<Test>::from(10u32));
+
+		assert_eq!(holdings_2.available_amount,  BalanceOf::<Test>::from(10u32));
+		assert_eq!(holdings_2.unavailable_amount,  BalanceOf::<Test>::from(0u32));
 	});
 }
