@@ -47,7 +47,7 @@ pub struct CarbonFootprintAccountInfo<MomentOf, IPFSLength: Get<u32>, BalanceOf>
 }
 
 // Carbon Footprint report data structure
-#[derive(Encode, Decode, Default, PartialEq, Eq, scale_info::TypeInfo)]
+#[derive(Encode, Decode, Default, Clone, PartialEq, Eq, scale_info::TypeInfo)]
 #[cfg_attr(feature = "std", derive(Debug))]
 pub struct CarbonFootprintReportInfo<AccountIdOf, MomentOf, BalanceOf> {
 	// Carbon footprint account
@@ -761,6 +761,26 @@ pub mod pallet {
 		PenaltyLevelsUpdated(BTreeMap<u8, BalanceOf<T>>),
 		/// Beneficiary Split Updated
 		BeneficiarySplitsUpdated(BTreeMap<u8, BalanceOf<T>>),
+		/// Base Pallet Time Updated
+		BasePalletTimeUpdated(BlockNumber<T>),
+		/// Carbon Footprint Report Updated
+		CarbonFootprintReportUpdated(BoundedString<T::IPFSLength>),
+		/// Project Proposal Updated
+		ProjectProposalUpdated(BoundedString<T::IPFSLength>),
+		/// Carbon Credit Batch Proposal Updated
+		CarbonCreditBatchProposalUpdated(BoundedString<T::IPFSLength>),
+		/// Carbon Credit Sale Order Updated
+		CarbonCreditSaleOrderUpdated(H256),
+		/// Account Complaint Updated
+		AccountComplaintUpdated(BoundedString<T::IPFSLength>),
+		/// Hash Complaint Updated
+		HashComplaintUpdated(BoundedString<T::IPFSLength>),
+		/// Project Owner Penalty Level Updated
+		ProjectOwnerPenaltyLevelUpdated(AccountIdOf<T>),
+		/// Validator Penalty Level Updated
+		ValidatorPenaltyLevelUpdated(AccountIdOf<T>),
+		/// Project Penalty Level Updated
+		ProjectPenaltyLevelUpdated(H256),
 	}
 
 	#[pallet::error]
@@ -2506,6 +2526,564 @@ pub mod pallet {
 
 			Ok(().into())
 		}
+
+		// Offchain worker extrinsics
+		#[pallet::call_index(19)]
+		#[pallet::weight(0)]
+		pub fn update_pallet_base_time(
+			_origin: OriginFor<T>,
+			new_pallet_base_time: BlockNumber<T>,
+		) -> DispatchResult {
+			let mut pallet_times = PalletTimeValues::<T>::get();
+
+			if pallet_times.pallet_base_time == BlockNumber::<T>::from(0u32)
+				|| new_pallet_base_time
+					== pallet_times.pallet_base_time + pallet_times.number_of_blocks_per_year
+			{
+				pallet_times =
+					TimeValues { pallet_base_time: new_pallet_base_time, ..pallet_times };
+
+				PalletTimeValues::<T>::set(pallet_times);
+
+				Self::deposit_event(Event::BasePalletTimeUpdated(new_pallet_base_time));
+			}
+
+			Ok(())
+		}
+
+		#[pallet::call_index(20)]
+		#[pallet::weight(0)]
+		pub fn update_carbon_footprint_report(
+			_origin: OriginFor<T>,
+			ipfs: BoundedString<T::IPFSLength>,
+		) -> DispatchResult {
+			let report = CarbonFootprintReports::<T>::get(ipfs.clone()).unwrap();
+
+			// Get the votes that were made for the report
+			let votes_for: u16 = report.votes_for.len().try_into().unwrap();
+			let votes_against: u16 = report.votes_against.len().try_into().unwrap();
+			let votes_total: u16 = votes_for + votes_against;
+
+			// Check if the vote has passed
+			if Self::has_vote_passed(votes_total, votes_for) {
+				let mut documentation_ipfses = BTreeSet::<BoundedString<T::IPFSLength>>::new();
+				documentation_ipfses.insert(ipfs.clone());
+
+				// Create an empty carbon footprint account
+				let mut new_account = CarbonFootprintAccountInfo {
+					documentation_ipfses,
+					carbon_footprint_suficit: report.carbon_footprint_suficit,
+					carbon_footprint_deficit: report.carbon_footprint_deficit,
+					creation_date: T::Time::now(),
+				};
+
+				// Check to see if a carbon footprint account with the given accountID exists
+				if CarbonFootprintAccounts::<T>::contains_key(report.cf_account.clone()) {
+					let old_account =
+						CarbonFootprintAccounts::<T>::get(report.cf_account.clone()).unwrap();
+
+					// Update documentation related to the carbon footprint account
+					let mut new_documentation = old_account.documentation_ipfses;
+					new_documentation.insert(ipfs.clone());
+
+					// Update the carbon footprint account structure
+					if report.carbon_footprint_suficit == BalanceOf::<T>::from(0u32) {
+						if report.carbon_footprint_deficit >= old_account.carbon_footprint_suficit {
+							let change_amount = report.carbon_footprint_deficit
+								- old_account.carbon_footprint_suficit;
+
+							new_account = CarbonFootprintAccountInfo {
+								documentation_ipfses: new_documentation,
+								carbon_footprint_suficit: BalanceOf::<T>::from(0u32),
+								carbon_footprint_deficit: old_account.carbon_footprint_deficit
+									+ change_amount,
+								creation_date: old_account.creation_date,
+							};
+						} else {
+							let change_amount = report.carbon_footprint_suficit
+								- new_account.carbon_footprint_deficit;
+
+							new_account = CarbonFootprintAccountInfo {
+								documentation_ipfses: new_documentation,
+								carbon_footprint_suficit: old_account.carbon_footprint_suficit
+									+ change_amount,
+								carbon_footprint_deficit: BalanceOf::<T>::from(0u32),
+								creation_date: old_account.creation_date,
+							};
+						}
+					} else {
+						if report.carbon_footprint_suficit >= old_account.carbon_footprint_deficit {
+							let change_amount = report.carbon_footprint_suficit
+								- old_account.carbon_footprint_deficit;
+
+							new_account = CarbonFootprintAccountInfo {
+								documentation_ipfses: new_documentation,
+								carbon_footprint_suficit: old_account.carbon_footprint_suficit
+									+ change_amount,
+								carbon_footprint_deficit: BalanceOf::<T>::from(0u32),
+								creation_date: old_account.creation_date,
+							};
+						} else {
+							let change_amount =
+								report.carbon_footprint_deficit - report.carbon_footprint_suficit;
+
+							new_account = CarbonFootprintAccountInfo {
+								documentation_ipfses: new_documentation,
+								carbon_footprint_suficit: BalanceOf::<T>::from(0u32),
+								carbon_footprint_deficit: old_account.carbon_footprint_deficit
+									+ change_amount,
+								creation_date: old_account.creation_date,
+							};
+						}
+					}
+				}
+
+				// Save the changes made to the carbon footprint account
+				CarbonFootprintAccounts::<T>::insert(report.cf_account.clone(), new_account);
+			}
+
+			// Create new report
+			// Note: Only change is made to the voting_active cycle status
+			let new_report = CarbonFootprintReportInfo {
+				cf_account: report.cf_account.clone(),
+				creation_date: report.creation_date,
+				carbon_footprint_suficit: report.carbon_footprint_suficit,
+				carbon_footprint_deficit: report.carbon_footprint_deficit,
+				votes_for: report.votes_for,
+				votes_against: report.votes_against,
+				voting_active: false,
+			};
+
+			// Save new report
+			CarbonFootprintReports::<T>::insert(ipfs.clone(), new_report);
+
+			Self::deposit_event(Event::CarbonFootprintReportUpdated(ipfs));
+
+			Ok(())
+		}
+
+		#[pallet::call_index(21)]
+		#[pallet::weight(0)]
+		pub fn update_project_proposal(
+			_origin: OriginFor<T>,
+			ipfs: BoundedString<T::IPFSLength>,
+		) -> DispatchResult {
+			let proposal = ProjectProposals::<T>::get(ipfs.clone()).unwrap();
+
+			// Get the votes that were made for the report
+			let votes_for: u16 = proposal.votes_for.len().try_into().unwrap();
+			let votes_against: u16 = proposal.votes_against.len().try_into().unwrap();
+			let votes_total: u16 = votes_for + votes_against;
+
+			// Check if the vote has passed
+			if Self::has_vote_passed(votes_total, votes_for) {
+				// Create a new project
+				let new_project = ProjectInfo {
+					documentation_ipfs: ipfs.clone(),
+					project_owner: proposal.project_owner.clone(),
+					creation_date: T::Time::now(),
+					penalty_level: 0,
+					penalty_timeout: BlockNumber::<T>::from(0u32),
+				};
+
+				// Save new project
+				Projects::<T>::insert(proposal.project_hash, new_project);
+			}
+
+			// Update proposal
+			// Note: Only change is made to the voting_active cycle status
+			let new_proposal = ProjectProposalInfo { voting_active: false, ..proposal };
+
+			// Save new proposal
+			ProjectProposals::<T>::insert(ipfs.clone(), new_proposal);
+
+			Self::deposit_event(Event::ProjectProposalUpdated(ipfs));
+
+			Ok(())
+		}
+
+		#[pallet::call_index(22)]
+		#[pallet::weight(0)]
+		pub fn update_carbon_credit_batch_proposal(
+			_origin: OriginFor<T>,
+			ipfs: BoundedString<T::IPFSLength>,
+		) -> DispatchResult {
+			let proposal = CarbonCreditBatchProposals::<T>::get(ipfs.clone()).unwrap();
+
+			// Get the votes that were made for the report
+			let votes_for: u16 = proposal.votes_for.len().try_into().unwrap();
+			let votes_against: u16 = proposal.votes_against.len().try_into().unwrap();
+			let votes_total: u16 = votes_for + votes_against;
+
+			// Check if the vote has passed
+			if Self::has_vote_passed(votes_total, votes_for) {
+				// Create a new project
+				let new_batch = CarbonCreditBatchInfo {
+					documentation_ipfs: ipfs.clone(),
+					project_hash: proposal.project_hash,
+					creation_date: T::Time::now(),
+					credit_amount: proposal.credit_amount,
+					penalty_repay_price: proposal.penalty_repay_price,
+					status: CarbonCreditBatchStatus::Active,
+					validator_benefactors: proposal.votes_for.clone(),
+				};
+
+				// Save new carbon credit batch
+				CarbonCreditBatches::<T>::insert(proposal.batch_hash, new_batch);
+
+				// Create carbon credit holdings for project owner
+				let new_holdings = CarbonCreditHoldingsInfo {
+					available_amount: proposal.credit_amount.into(),
+					unavailable_amount: BalanceOf::<T>::from(0u32),
+				};
+
+				// Get project owner accountID
+				let project = Projects::<T>::get(proposal.project_hash).unwrap();
+
+				// Save project owner carbon credit holdings
+				CarbonCreditHoldings::<T>::insert(
+					proposal.batch_hash,
+					project.project_owner,
+					new_holdings,
+				);
+			}
+
+			// Create new proposal
+			// Note: Only change is made to the voting_active cycle status
+			let new_proposal = CarbonCreditBatchProposalInfo { voting_active: false, ..proposal };
+
+			// Save new proposal
+			CarbonCreditBatchProposals::<T>::insert(ipfs.clone(), new_proposal);
+
+			Self::deposit_event(Event::CarbonCreditBatchProposalUpdated(ipfs));
+
+			Ok(())
+		}
+
+		#[pallet::call_index(23)]
+		#[pallet::weight(0)]
+		pub fn update_carbon_credit_sale_order(
+			_origin: OriginFor<T>,
+			sale_hash: H256,
+		) -> DispatchResult {
+			// Get sale order
+			let mut sale_order = CarbonCreditSaleOrders::<T>::get(sale_hash).unwrap();
+
+			// Update sale order
+			sale_order = CarbonCreditSaleOrderInfo { sale_active: false, ..sale_order };
+
+			CarbonCreditSaleOrders::<T>::insert(sale_hash, sale_order.clone());
+
+			// Update seller holdings
+			let mut seller_holdings =
+				CarbonCreditHoldings::<T>::get(sale_order.batch_hash, sale_order.clone().seller)
+					.unwrap();
+
+			seller_holdings = CarbonCreditHoldingsInfo {
+				available_amount: seller_holdings.available_amount + sale_order.credit_amount,
+				unavailable_amount: seller_holdings.unavailable_amount - sale_order.credit_amount,
+			};
+
+			CarbonCreditHoldings::<T>::insert(
+				sale_order.batch_hash,
+				sale_order.seller,
+				seller_holdings,
+			);
+
+			Self::deposit_event(Event::CarbonCreditSaleOrderUpdated(sale_hash));
+
+			Ok(())
+		}
+
+		#[pallet::call_index(24)]
+		#[pallet::weight(0)]
+		pub fn update_complaint_for_account(
+			_origin: OriginFor<T>,
+			complaint: BoundedString<T::IPFSLength>,
+		) -> DispatchResult {
+			let mut specific_complaint =
+				ComplaintsForAccounts::<T>::get(complaint.clone()).unwrap();
+
+			specific_complaint =
+				ComplaintAccountBasedInfo { complaint_active: false, ..specific_complaint };
+
+			// Get the votes that were made for the report
+			let votes_for: u16 = specific_complaint.votes_for.len().try_into().unwrap();
+			let votes_against: u16 = specific_complaint.votes_against.len().try_into().unwrap();
+			let votes_total: u16 = votes_for + votes_against;
+
+			// Update penalties only if the complaint passed
+			if Self::has_vote_passed(votes_total, votes_for) {
+				let current_block = frame_system::Pallet::<T>::block_number();
+				let new_timeout_block =
+					current_block + PalletTimeValues::<T>::get().penalty_timeout;
+
+				// Match complaint type
+				match specific_complaint.complaint_type {
+					ComplaintType::ProjectOwnerComplaint => {
+						// Update values for project owner
+						let mut project_owner =
+							ProjectOwners::<T>::get(specific_complaint.clone().complaint_for)
+								.unwrap();
+
+						// Remove previous penalty timeout if it existed
+						if PenaltyTimeoutsAccounts::<T>::contains_key(project_owner.penalty_timeout)
+						{
+							let mut penalty_timeouts =
+								PenaltyTimeoutsAccounts::<T>::get(project_owner.penalty_timeout)
+									.unwrap();
+
+							penalty_timeouts.remove(&specific_complaint.clone().complaint_for);
+
+							PenaltyTimeoutsAccounts::<T>::insert(
+								project_owner.penalty_timeout,
+								penalty_timeouts,
+							);
+						}
+
+						project_owner = ProjectValidatorOrProjectOwnerInfo {
+							penalty_level: project_owner.penalty_level + 1,
+							penalty_timeout: new_timeout_block,
+							..project_owner
+						};
+
+						ProjectOwners::<T>::insert(
+							specific_complaint.clone().complaint_for,
+							project_owner,
+						);
+
+						// Unfreeze all batches
+						Self::unfreeze_all_owner_batches(specific_complaint.clone().complaint_for);
+					},
+					ComplaintType::ValidatorComplaint => {
+						// Update values for validator
+						let mut validator =
+							Validators::<T>::get(specific_complaint.clone().complaint_for).unwrap();
+
+						// Remove previous penalty timeout if it existed
+						if PenaltyTimeoutsAccounts::<T>::contains_key(validator.penalty_timeout) {
+							let mut penalty_timeouts =
+								PenaltyTimeoutsAccounts::<T>::get(validator.penalty_timeout)
+									.unwrap();
+							penalty_timeouts.remove(&specific_complaint.clone().complaint_for);
+
+							PenaltyTimeoutsAccounts::<T>::insert(
+								validator.penalty_timeout,
+								penalty_timeouts,
+							);
+						}
+
+						validator = ProjectValidatorOrProjectOwnerInfo {
+							penalty_level: validator.penalty_level + 1,
+							penalty_timeout: new_timeout_block,
+							..validator
+						};
+
+						Validators::<T>::insert(
+							specific_complaint.clone().complaint_for,
+							validator,
+						);
+					},
+					_ => {},
+				}
+
+				let mut penalty_timeouts =
+					PenaltyTimeoutsAccounts::<T>::get(new_timeout_block).unwrap();
+				penalty_timeouts.insert(specific_complaint.clone().complaint_for);
+
+				PenaltyTimeoutsAccounts::<T>::insert(new_timeout_block, penalty_timeouts);
+			}
+
+			ComplaintsForAccounts::<T>::insert(complaint.clone(), specific_complaint);
+
+			Self::deposit_event(Event::AccountComplaintUpdated(complaint));
+
+			Ok(())
+		}
+
+		#[pallet::call_index(25)]
+		#[pallet::weight(0)]
+		pub fn update_complaint_for_hash(
+			_origin: OriginFor<T>,
+			complaint: BoundedString<T::IPFSLength>,
+		) -> DispatchResult {
+			let mut specific_complaint = ComplaintsForHashes::<T>::get(complaint.clone()).unwrap();
+
+			specific_complaint =
+				ComplaintHashBasedInfo { complaint_active: false, ..specific_complaint };
+
+			// Get the votes that were made for the report
+			let votes_for: u16 = specific_complaint.votes_for.len().try_into().unwrap();
+			let votes_against: u16 = specific_complaint.votes_against.len().try_into().unwrap();
+			let votes_total: u16 = votes_for + votes_against;
+
+			// Update penalties only if the complaint passed
+			if Self::has_vote_passed(votes_total, votes_for) {
+				let current_block = frame_system::Pallet::<T>::block_number();
+				let new_timeout_block =
+					current_block + PalletTimeValues::<T>::get().penalty_timeout;
+
+				// Match complaint type
+				match specific_complaint.complaint_type {
+					ComplaintType::CarbonCreditBatchComplaint => {
+						// Update values for carbon credit batch
+						let mut batch =
+							CarbonCreditBatches::<T>::get(specific_complaint.clone().complaint_for)
+								.unwrap();
+
+						batch = CarbonCreditBatchInfo {
+							status: CarbonCreditBatchStatus::Redacted,
+							..batch
+						};
+
+						CarbonCreditBatches::<T>::insert(
+							specific_complaint.clone().complaint_for,
+							batch,
+						);
+
+						// Recalculate carbon balances for CFAs
+						Self::recalculate_cfa_balances(specific_complaint.clone().complaint_for);
+
+						// Calculate and save repayments needed for project owner
+						Self::calculate_project_owner_debts(
+							specific_complaint.clone().complaint_for,
+						);
+					},
+					ComplaintType::ProjectComplaint => {
+						// Update values for project
+						let mut project =
+							Projects::<T>::get(specific_complaint.clone().complaint_for).unwrap();
+
+						// Remove previous penalty timeout if it existed
+						if PenaltyTimeoutsHashes::<T>::contains_key(project.penalty_timeout) {
+							let mut penalty_timeouts =
+								PenaltyTimeoutsHashes::<T>::get(project.penalty_timeout).unwrap();
+							penalty_timeouts.remove(&specific_complaint.clone().complaint_for);
+
+							PenaltyTimeoutsHashes::<T>::insert(
+								project.penalty_timeout,
+								penalty_timeouts,
+							);
+						}
+
+						project = ProjectInfo {
+							penalty_level: project.penalty_level + 1,
+							penalty_timeout: new_timeout_block,
+							..project
+						};
+
+						Projects::<T>::insert(specific_complaint.clone().complaint_for, project);
+
+						Self::unfreeze_all_project_batches(
+							specific_complaint.clone().complaint_for,
+						);
+					},
+					_ => {},
+				}
+
+				let mut penalty_timeouts =
+					PenaltyTimeoutsHashes::<T>::get(new_timeout_block).unwrap();
+				penalty_timeouts.insert(specific_complaint.clone().complaint_for);
+
+				PenaltyTimeoutsHashes::<T>::insert(new_timeout_block, penalty_timeouts);
+			}
+
+			ComplaintsForHashes::<T>::insert(complaint.clone(), specific_complaint);
+
+			Self::deposit_event(Event::HashComplaintUpdated(complaint));
+
+			Ok(())
+		}
+
+		#[pallet::call_index(26)]
+		#[pallet::weight(0)]
+		pub fn update_project_owner_penalty_level(
+			_origin: OriginFor<T>,
+			account_id: AccountIdOf<T>,
+		) -> DispatchResult {
+			let mut project_owner = ProjectOwners::<T>::get(account_id.clone()).unwrap();
+
+			let current_block = frame_system::Pallet::<T>::block_number();
+			let new_timeout_block = current_block + PalletTimeValues::<T>::get().penalty_timeout;
+
+			let new_penalty_level = project_owner.penalty_level - 1;
+			let mut new_penalty_timeout = new_timeout_block;
+
+			if new_penalty_level == 0 {
+				new_penalty_timeout = BlockNumber::<T>::from(0u32);
+			}
+
+			project_owner = ProjectValidatorOrProjectOwnerInfo {
+				penalty_level: new_penalty_level,
+				penalty_timeout: new_penalty_timeout,
+				..project_owner
+			};
+
+			ProjectOwners::<T>::insert(account_id.clone(), project_owner);
+
+			Self::deposit_event(Event::ProjectOwnerPenaltyLevelUpdated(account_id));
+
+			Ok(())
+		}
+
+		#[pallet::call_index(27)]
+		#[pallet::weight(0)]
+		pub fn update_validator_penalty_level(
+			_origin: OriginFor<T>,
+			account_id: AccountIdOf<T>,
+		) -> DispatchResult {
+			let mut validator = Validators::<T>::get(account_id.clone()).unwrap();
+
+			let current_block = frame_system::Pallet::<T>::block_number();
+			let new_timeout_block = current_block + PalletTimeValues::<T>::get().penalty_timeout;
+
+			let new_penalty_level = validator.penalty_level - 1;
+			let mut new_penalty_timeout = new_timeout_block;
+
+			if new_penalty_level == 0 {
+				new_penalty_timeout = BlockNumber::<T>::from(0u32);
+			}
+
+			validator = ProjectValidatorOrProjectOwnerInfo {
+				penalty_level: new_penalty_level,
+				penalty_timeout: new_penalty_timeout,
+				..validator
+			};
+
+			Validators::<T>::insert(account_id.clone(), validator);
+
+			Self::deposit_event(Event::ValidatorPenaltyLevelUpdated(account_id));
+
+			Ok(())
+		}
+
+		#[pallet::call_index(28)]
+		#[pallet::weight(0)]
+		pub fn update_project_penalty_level(_origin: OriginFor<T>, hash: H256) -> DispatchResult {
+			let mut project = Projects::<T>::get(hash).unwrap();
+
+			let current_block = frame_system::Pallet::<T>::block_number();
+			let new_timeout_block = current_block + PalletTimeValues::<T>::get().penalty_timeout;
+
+			let new_penalty_level = project.penalty_level - 1;
+			let mut new_penalty_timeout = new_timeout_block;
+
+			if new_penalty_level == 0 {
+				new_penalty_timeout = BlockNumber::<T>::from(0u32);
+			}
+
+			project = ProjectInfo {
+				penalty_level: new_penalty_level,
+				penalty_timeout: new_penalty_timeout,
+				..project
+			};
+
+			Projects::<T>::insert(hash, project);
+
+			Self::deposit_event(Event::ProjectPenaltyLevelUpdated(hash));
+
+			Ok(())
+		}
 	}
 
 	#[pallet::validate_unsigned]
@@ -2514,14 +3092,86 @@ pub mod pallet {
 
 		fn validate_unsigned(_source: TransactionSource, call: &Self::Call) -> TransactionValidity {
 			match call {
-				// Call::update_base_pallet_time { new_base_pallet_time } => {
-				// 	ValidTransaction::with_tag_prefix("Veles::update_base_pallet_time")
-				// 		.priority(T::UnsignedPriority::get())
-				// 		.longevity(T::UnsignedLongevity::get())
-				// 		.and_provides([new_base_pallet_time])
-				// 		.propagate(true)
-				// 		.build()
-				// },
+				Call::update_pallet_base_time { new_pallet_base_time } => {
+					ValidTransaction::with_tag_prefix("Veles::update_pallet_base_time")
+						.priority(T::UnsignedPriority::get())
+						.longevity(T::UnsignedLongevity::get())
+						.and_provides([new_pallet_base_time])
+						.propagate(true)
+						.build()
+				},
+				Call::update_carbon_footprint_report { ipfs } => {
+					ValidTransaction::with_tag_prefix("Veles::update_carbon_footprint_report")
+						.priority(T::UnsignedPriority::get())
+						.longevity(T::UnsignedLongevity::get())
+						.and_provides([ipfs])
+						.propagate(true)
+						.build()
+				},
+				Call::update_project_proposal { ipfs } => {
+					ValidTransaction::with_tag_prefix("Veles::update_project_proposal")
+						.priority(T::UnsignedPriority::get())
+						.longevity(T::UnsignedLongevity::get())
+						.and_provides([ipfs])
+						.propagate(true)
+						.build()
+				},
+				Call::update_carbon_credit_batch_proposal { ipfs } => {
+					ValidTransaction::with_tag_prefix("Veles::update_carbon_credit_batch_proposal")
+						.priority(T::UnsignedPriority::get())
+						.longevity(T::UnsignedLongevity::get())
+						.and_provides([ipfs])
+						.propagate(true)
+						.build()
+				},
+				Call::update_carbon_credit_sale_order { sale_hash } => {
+					ValidTransaction::with_tag_prefix("Veles::update_carbon_credit_sale_order")
+						.priority(T::UnsignedPriority::get())
+						.longevity(T::UnsignedLongevity::get())
+						.and_provides([sale_hash])
+						.propagate(true)
+						.build()
+				},
+				Call::update_complaint_for_account { complaint } => {
+					ValidTransaction::with_tag_prefix("Veles::update_complaint_for_account")
+						.priority(T::UnsignedPriority::get())
+						.longevity(T::UnsignedLongevity::get())
+						.and_provides([complaint])
+						.propagate(true)
+						.build()
+				},
+				Call::update_complaint_for_hash { complaint } => {
+					ValidTransaction::with_tag_prefix("Veles::update_complaint_for_hash")
+						.priority(T::UnsignedPriority::get())
+						.longevity(T::UnsignedLongevity::get())
+						.and_provides([complaint])
+						.propagate(true)
+						.build()
+				},
+				Call::update_project_owner_penalty_level { account_id } => {
+					ValidTransaction::with_tag_prefix("Veles::update_project_owner_penalty_level")
+						.priority(T::UnsignedPriority::get())
+						.longevity(T::UnsignedLongevity::get())
+						.and_provides([account_id])
+						.propagate(true)
+						.build()
+				},
+				Call::update_validator_penalty_level { account_id } => {
+					ValidTransaction::with_tag_prefix("Veles::update_validator_penalty_level")
+						.priority(T::UnsignedPriority::get())
+						.longevity(T::UnsignedLongevity::get())
+						.and_provides([account_id])
+						.propagate(true)
+						.build()
+				},
+				Call::update_project_penalty_level { hash } => {
+					ValidTransaction::with_tag_prefix("Veles::update_project_penalty_level")
+						.priority(T::UnsignedPriority::get())
+						.longevity(T::UnsignedLongevity::get())
+						.and_provides([hash])
+						.propagate(true)
+						.build()
+				},
 				_ => {
 					warn!("Unknown unsigned call {:?}", call);
 					InvalidTransaction::Call.into()
@@ -2532,34 +3182,255 @@ pub mod pallet {
 
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
-		fn on_initialize(now: BlockNumber<T>) -> Weight {
-			let mut consumed_weight = Self::update_pallet_base_time(now);
-			consumed_weight += Self::check_voting_timeouts(now);
-			consumed_weight += Self::check_sale_timeouts(now);
-			consumed_weight += Self::check_complaint_timeouts(now);
-			consumed_weight += Self::check_penalty_timeouts(now);
+		fn offchain_worker(now: BlockNumber<T>) {
+			// Check if a year has passed and update pallet base time if it has
+			// Note: The base pallet time will update once a year has passed (in blocks)
+			let pallet_times = PalletTimeValues::<T>::get();
 
-			consumed_weight
+			if pallet_times.pallet_base_time == 0u32.into()
+				|| now > pallet_times.pallet_base_time + pallet_times.number_of_blocks_per_year
+			{
+				info!("👷 Offchain worker: Updating base pallet time");
+
+				let call = Call::<T>::update_pallet_base_time { new_pallet_base_time: now.clone() };
+
+				if let Err(err) =
+					SubmitTransaction::<T, Call<T>>::submit_unsigned_transaction(call.into())
+				{
+					warn!(
+						"👷 Offchain worker: Failed to update base pallet time.🚧 Error: {:?}",
+						err
+					);
+				} else {
+					info!("👷 Offchain worker: Successfully updated base pallet time");
+				}
+			}
+			
+			// Check if any complaint timeout event has occured
+			if ComplaintTimeouts::<T>::contains_key(now) {
+				let complaint_events = ComplaintTimeouts::<T>::get(now).unwrap();
+
+				for complaint in complaint_events.iter() {
+					if ComplaintsForAccounts::<T>::contains_key(complaint.clone()) {
+						info!("👷 Offchain worker: Updating complaint for account ");
+
+						let call = Call::<T>::update_complaint_for_account {
+							complaint: complaint.clone(),
+						};
+
+						if let Err(err) =
+							SubmitTransaction::<T, Call<T>>::submit_unsigned_transaction(
+								call.into(),
+							) {
+							warn!(
+									"👷 Offchain worker: Failed to update complaint for account .🚧 Error: {:?}",
+									err
+								);
+						} else {
+							info!(
+								"👷 Offchain worker: Successfully updated complaint for account "
+							);
+						}
+					}
+
+					if ComplaintsForHashes::<T>::contains_key(complaint.clone()) {
+						info!("👷 Offchain worker: Updating complaint for hash ");
+
+						let call =
+							Call::<T>::update_complaint_for_hash { complaint: complaint.clone() };
+
+						if let Err(err) =
+							SubmitTransaction::<T, Call<T>>::submit_unsigned_transaction(
+								call.into(),
+							) {
+							warn!(
+									"👷 Offchain worker: Failed to update complaint for hash .🚧 Error: {:?}",
+									err
+								);
+						} else {
+							info!("👷 Offchain worker: Successfully updated complaint for hash ");
+						}
+					}
+				}
+
+				// Remove execuded timeout events
+				ComplaintTimeouts::<T>::remove(now);
+			}
+
+			// Check if a voting timeout event has occured
+			if VotingTimeouts::<T>::contains_key(now) {
+				let timeout_events = VotingTimeouts::<T>::get(now).unwrap();
+
+				for ipfs in timeout_events.iter() {
+					// Check if IPFS is related to a carbon footprint report
+					if CarbonFootprintReports::<T>::contains_key(ipfs.clone()) {
+						info!("👷 Offchain worker: Updating carbon footprint report");
+
+						let call = Call::<T>::update_carbon_footprint_report { ipfs: ipfs.clone() };
+
+						if let Err(err) =
+							SubmitTransaction::<T, Call<T>>::submit_unsigned_transaction(
+								call.into(),
+							) {
+							warn!(
+								"👷 Offchain worker: Failed to update carbon footprint report.🚧 Error: {:?}",
+								err
+							);
+						} else {
+							info!(
+								"👷 Offchain worker: Successfully updated carbon footprint report"
+							);
+						}
+					}
+
+					// Check if IPFS is related to a project proposal
+					if ProjectProposals::<T>::contains_key(ipfs.clone()) {
+						info!("👷 Offchain worker: Updating project proposal");
+
+						let call = Call::<T>::update_project_proposal { ipfs: ipfs.clone() };
+
+						if let Err(err) =
+							SubmitTransaction::<T, Call<T>>::submit_unsigned_transaction(
+								call.into(),
+							) {
+							warn!(
+								"👷 Offchain worker: Failed to update project proposal.🚧 Error: {:?}",
+								err
+							);
+						} else {
+							info!("👷 Offchain worker: Successfully updated project proposal");
+						}
+					}
+
+					// Check if IPFS is related to a carbon credits batch proposal
+					if CarbonCreditBatchProposals::<T>::contains_key(ipfs.clone()) {
+						info!("👷 Offchain worker: Updating carbon credit batch proposal");
+
+						let call =
+							Call::<T>::update_carbon_credit_batch_proposal { ipfs: ipfs.clone() };
+
+						if let Err(err) =
+							SubmitTransaction::<T, Call<T>>::submit_unsigned_transaction(
+								call.into(),
+							) {
+							warn!(
+								"👷 Offchain worker: Failed to update carbon credit batch proposal.🚧 Error: {:?}",
+								err
+							);
+						} else {
+							info!("👷 Offchain worker: Successfully updated carbon credit batch proposal");
+						}
+					}
+				}
+
+				VotingTimeouts::<T>::remove(now);
+			}
+
+			// Check if a sale timeout event has occured
+			if SaleOrderTimeouts::<T>::contains_key(now) {
+				let sale_events = SaleOrderTimeouts::<T>::get(now).unwrap();
+
+				for sale_hash in sale_events.iter() {
+					info!("👷 Offchain worker: Updating carbon credit sale order");
+
+					let call = Call::<T>::update_carbon_credit_sale_order { sale_hash: *sale_hash };
+
+					if let Err(err) =
+						SubmitTransaction::<T, Call<T>>::submit_unsigned_transaction(call.into())
+					{
+						warn!(
+								"👷 Offchain worker: Failed to update carbon credit sale order.🚧 Error: {:?}",
+								err
+							);
+					} else {
+						info!("👷 Offchain worker: Successfully updated carbon credit sale order");
+					}
+				}
+
+				SaleOrderTimeouts::<T>::remove(&now);
+			}
+
+			// Check if any penalty timeout event has occured
+			if PenaltyTimeoutsAccounts::<T>::contains_key(now) {
+				let account_ids = PenaltyTimeoutsAccounts::<T>::get(now).unwrap();
+
+				for account_id in account_ids.iter() {
+					if ProjectOwners::<T>::contains_key(account_id) {
+						info!("👷 Offchain worker: Updating project owner penalty level");
+
+						let call = Call::<T>::update_project_owner_penalty_level {
+							account_id: account_id.clone(),
+						};
+
+						if let Err(err) =
+							SubmitTransaction::<T, Call<T>>::submit_unsigned_transaction(
+								call.into(),
+							) {
+							warn!(
+									"👷 Offchain worker: Failed to update project owner penalty level.🚧 Error: {:?}",
+									err
+								);
+						} else {
+							info!(
+								"👷 Offchain worker: Successfully updated project owner penalty level"
+							);
+						}
+					}
+
+					if Validators::<T>::contains_key(account_id) {
+						info!("👷 Offchain worker: Updating validator penalty level");
+
+						let call = Call::<T>::update_validator_penalty_level {
+							account_id: account_id.clone(),
+						};
+
+						if let Err(err) =
+							SubmitTransaction::<T, Call<T>>::submit_unsigned_transaction(
+								call.into(),
+							) {
+							warn!(
+									"👷 Offchain worker: Failed to update validator penalty level.🚧 Error: {:?}",
+									err
+								);
+						} else {
+							info!(
+								"👷 Offchain worker: Successfully updated validator penalty level"
+							);
+						}
+					}
+				}
+
+				PenaltyTimeoutsAccounts::<T>::remove(now);
+			}
+
+			if PenaltyTimeoutsHashes::<T>::contains_key(now) {
+				let hashes = PenaltyTimeoutsHashes::<T>::get(now).unwrap();
+
+				for hash in hashes.iter() {
+					if Projects::<T>::contains_key(hash) {
+						info!("👷 Offchain worker: Updating project  penalty level");
+
+						let call = Call::<T>::update_project_penalty_level { hash: *hash };
+
+						if let Err(err) =
+							SubmitTransaction::<T, Call<T>>::submit_unsigned_transaction(
+								call.into(),
+							) {
+							warn!(
+									"👷 Offchain worker: Failed to update project  penalty level.🚧 Error: {:?}",
+									err
+								);
+						} else {
+							info!(
+								"👷 Offchain worker: Successfully updated project  penalty level"
+							);
+						}
+					}
+				}
+
+				PenaltyTimeoutsHashes::<T>::remove(now);
+			}
 		}
-
-		// fn offchain_worker(now: BlockNumber<T>) {
-
-		// 	let base_pallet_time = BasePalletTime::<T>::get();
-
-		// 	// Check if a year has passed and update pallet base time if it has
-		// 	// Note: The base pallet time will update once a year has passed (in blocks)
-		// 	if base_pallet_time == 0u32.into() || now > base_pallet_time + T::NumberOfBlocksYearly::get().into() {
-		// 		info!("👷 Offchain worker: Running base pallet time check");
-
-		// 		let call = Call::<T>::update_base_pallet_time { new_base_pallet_time: now.clone() };
-
-		// 		if let Err(err) = SubmitTransaction::<T, Call<T>>::submit_unsigned_transaction(call.into()) {
-		// 			warn!("👷 Offchain worker: Failed to liquidate user position.🚧 Error: {:?}", err);
-		// 		} else {
-		// 			info!("👷 Offchain worker: Updated base pallet time");
-		// 		}
-		// 	}
-		// }
 	}
 
 	impl<T: Config> Pallet<T> {
@@ -2681,655 +3552,8 @@ pub mod pallet {
 			result
 		}
 
-		// Check if a year has passed and update pallet base time if it has
-		// Note: The base pallet time will update once a year has passed (in blocks)
-		pub fn update_pallet_base_time(now: BlockNumber<T>) -> Weight {
-			let mut counter: u64 = 0;
-
-			let mut pallet_times = PalletTimeValues::<T>::get();
-
-			if pallet_times.pallet_base_time == BlockNumber::<T>::from(0u32)
-				|| now == pallet_times.pallet_base_time + pallet_times.number_of_blocks_per_year
-			{
-				pallet_times = TimeValues { pallet_base_time: now, ..pallet_times };
-
-				PalletTimeValues::<T>::set(pallet_times);
-
-				counter += 1;
-			}
-
-			T::DbWeight::get()
-				.reads(counter)
-				.saturating_add(T::DbWeight::get().writes(counter))
-		}
-
-		// Check if any voting timeout event has occured
-		pub fn check_voting_timeouts(now: BlockNumber<T>) -> Weight {
-			let mut counter: u64 = 0;
-
-			if VotingTimeouts::<T>::contains_key(now) {
-				let timeout_events =
-					VotingTimeouts::<T>::get(now).unwrap();
-
-				for ipfs in timeout_events.iter() {
-					// Check if IPFS is related to a carbon footprint report
-					if CarbonFootprintReports::<T>::contains_key(ipfs.clone()) {
-						let report = CarbonFootprintReports::<T>::get(ipfs.clone()).unwrap();
-
-						Self::update_carbon_footprint_account(report, ipfs.clone());
-
-						counter += 1;
-					}
-
-					// Check if IPFS is related to a project proposal
-					if ProjectProposals::<T>::contains_key(ipfs.clone()) {
-						let proposal = ProjectProposals::<T>::get(ipfs.clone()).unwrap();
-
-						Self::update_project_proposal(proposal, ipfs.clone());
-
-						counter += 1;
-					}
-
-					// Check if IPFS is related to a carbon credits batch proposal
-					if CarbonCreditBatchProposals::<T>::contains_key(ipfs.clone()) {
-						let proposal = CarbonCreditBatchProposals::<T>::get(ipfs.clone()).unwrap();
-
-						Self::update_carbon_credit_batch(proposal, ipfs.clone());
-
-						counter += 1;
-					}
-				}
-
-				VotingTimeouts::<T>::remove(now);
-			}
-
-			T::DbWeight::get()
-				.reads(counter)
-				.saturating_add(T::DbWeight::get().writes(counter))
-		}
-
-		// Check if any sale timeout event has occured
-		pub fn check_sale_timeouts(now: BlockNumber<T>) -> Weight {
-			let mut counter: u64 = 0;
-
-			if SaleOrderTimeouts::<T>::contains_key(now) {
-				let sale_events = SaleOrderTimeouts::<T>::get(now).unwrap();
-
-				for sale_hash in sale_events.iter() {
-					// Get sale order
-					let mut sale_order = CarbonCreditSaleOrders::<T>::get(sale_hash).unwrap();
-
-					// Update sale order
-					sale_order = CarbonCreditSaleOrderInfo { sale_active: false, ..sale_order };
-
-					CarbonCreditSaleOrders::<T>::insert(sale_hash, sale_order.clone());
-
-					// Update seller holdings
-					let mut seller_holdings =
-						CarbonCreditHoldings::<T>::get(sale_order.batch_hash, sale_order.clone().seller)
-							.unwrap();
-
-					seller_holdings = CarbonCreditHoldingsInfo {
-						available_amount: seller_holdings.available_amount
-							+ sale_order.credit_amount,
-						unavailable_amount: seller_holdings.unavailable_amount
-							- sale_order.credit_amount,
-					};
-
-					CarbonCreditHoldings::<T>::insert(
-						sale_order.batch_hash,
-						sale_order.seller,
-						seller_holdings,
-					);
-
-					counter += 1;
-				}
-			}
-
-			SaleOrderTimeouts::<T>::remove(&now);
-
-			T::DbWeight::get()
-				.reads(counter)
-				.saturating_add(T::DbWeight::get().writes(counter))
-		}
-
-		// Check if any complaint timeout event has occured
-		pub fn check_complaint_timeouts(now: BlockNumber<T>) -> Weight {
-			let mut counter: u64 = 0;
-
-			if ComplaintTimeouts::<T>::contains_key(now) {
-				let complaint_events = ComplaintTimeouts::<T>::get(now).unwrap();
-
-				for complaint in complaint_events.iter() {
-					// Check if complaint is for the account type
-					Self::update_account_complaints(complaint.clone(), &mut counter);
-
-					// Check if complaint is for the hash type
-					Self::update_hash_complaints(complaint.clone(), &mut counter);
-				}
-
-				// Remove execuded timeout events
-				ComplaintTimeouts::<T>::remove(now);
-			}
-
-			T::DbWeight::get()
-				.reads(counter)
-				.saturating_add(T::DbWeight::get().writes(counter))
-		}
-
-		// Check if any penalty timeout event has occured
-		pub fn check_penalty_timeouts(now: BlockNumber<T>) -> Weight {
-			let mut counter: u64 = 0;
-
-			if PenaltyTimeoutsAccounts::<T>::contains_key(now) {
-				Self::update_account_penalties(now, &mut counter);
-			}
-
-			if PenaltyTimeoutsHashes::<T>::contains_key(now) {
-				Self::update_hash_penalties(now, &mut counter);
-			}
-
-			T::DbWeight::get()
-				.reads(counter)
-				.saturating_add(T::DbWeight::get().writes(counter))
-		}
-
-		// Update account based penalties
-		pub fn update_account_penalties(now: BlockNumber<T>, counter: &mut u64) {
-			let account_ids = PenaltyTimeoutsAccounts::<T>::get(now).unwrap();
-
-			let current_block = frame_system::Pallet::<T>::block_number();
-			let new_timeout_block = current_block + PalletTimeValues::<T>::get().penalty_timeout;
-
-			for account_id in account_ids.iter() {
-				if ProjectOwners::<T>::contains_key(account_id) {
-					let mut project_owner = ProjectOwners::<T>::get(account_id).unwrap();
-
-					let new_penalty_level = project_owner.penalty_level - 1;
-					let mut new_penalty_timeout = new_timeout_block;
-
-					if new_penalty_level == 0 {
-						new_penalty_timeout = BlockNumber::<T>::from(0u32);
-					}
-
-					project_owner = ProjectValidatorOrProjectOwnerInfo {
-						penalty_level: new_penalty_level,
-						penalty_timeout: new_penalty_timeout,
-						..project_owner
-					};
-
-					ProjectOwners::<T>::insert(account_id, project_owner);
-
-					*counter += 1;
-				}
-
-				if Validators::<T>::contains_key(account_id) {
-					let mut validator = Validators::<T>::get(account_id).unwrap();
-
-					let new_penalty_level = validator.penalty_level - 1;
-					let mut new_penalty_timeout = new_timeout_block;
-
-					if new_penalty_level == 0 {
-						new_penalty_timeout = BlockNumber::<T>::from(0u32);
-					}
-
-					validator = ProjectValidatorOrProjectOwnerInfo {
-						penalty_level: new_penalty_level,
-						penalty_timeout: new_penalty_timeout,
-						..validator
-					};
-
-					Validators::<T>::insert(account_id, validator);
-
-					*counter += 1;
-				}
-			}
-
-			PenaltyTimeoutsAccounts::<T>::remove(now);
-		}
-
-		// Update hash based penalties
-		pub fn update_hash_penalties(now: BlockNumber<T>, counter: &mut u64) {
-			let hashes = PenaltyTimeoutsHashes::<T>::get(now).unwrap();
-
-			let current_block = frame_system::Pallet::<T>::block_number();
-			let new_timeout_block = current_block + PalletTimeValues::<T>::get().penalty_timeout;
-
-			for hash in hashes.iter() {
-				if Projects::<T>::contains_key(hash) {
-					let mut project = Projects::<T>::get(hash).unwrap();
-
-					let new_penalty_level = project.penalty_level - 1;
-					let mut new_penalty_timeout = new_timeout_block;
-
-					if new_penalty_level == 0 {
-						new_penalty_timeout = BlockNumber::<T>::from(0u32);
-					}
-
-					project = ProjectInfo {
-						penalty_level: new_penalty_level,
-						penalty_timeout: new_penalty_timeout,
-						..project
-					};
-
-					Projects::<T>::insert(hash, project);
-
-					*counter += 1;
-				}
-			}
-
-			PenaltyTimeoutsHashes::<T>::remove(now);
-		}
-
-		// Update carbon footprint account after voting ends
-		pub fn update_carbon_footprint_account(
-			report: CarbonFootprintReportInfo<AccountIdOf<T>, MomentOf<T>, BalanceOf<T>>,
-			ipfs: BoundedString<T::IPFSLength>,
-		) {
-			// Get the votes that were made for the report
-			let votes_for: u16 = report.votes_for.len().try_into().unwrap();
-			let votes_against: u16 = report.votes_against.len().try_into().unwrap();
-			let votes_total: u16 = votes_for + votes_against;
-
-			// Check if the vote has passed
-			if Self::has_vote_passed(votes_total, votes_for) {
-				let mut documentation_ipfses = BTreeSet::<BoundedString<T::IPFSLength>>::new();
-				documentation_ipfses.insert(ipfs.clone());
-
-				// Create an empty carbon footprint account
-				let mut new_account = CarbonFootprintAccountInfo {
-					documentation_ipfses,
-					carbon_footprint_suficit: report.carbon_footprint_suficit,
-					carbon_footprint_deficit: report.carbon_footprint_deficit,
-					creation_date: T::Time::now(),
-				};
-
-				// Check to see if a carbon footprint account with the given accountID exists
-				if CarbonFootprintAccounts::<T>::contains_key(report.cf_account.clone()) {
-					let old_account =
-						CarbonFootprintAccounts::<T>::get(report.cf_account.clone()).unwrap();
-
-					// Update documentation related to the carbon footprint account
-					let mut new_documentation = old_account.documentation_ipfses;
-					new_documentation.insert(ipfs.clone());
-
-					// Update the carbon footprint account structure
-					if report.carbon_footprint_suficit == BalanceOf::<T>::from(0u32) {
-						if report.carbon_footprint_deficit >= old_account.carbon_footprint_suficit {
-							let change_amount = report.carbon_footprint_deficit
-								- old_account.carbon_footprint_suficit;
-
-							new_account = CarbonFootprintAccountInfo {
-								documentation_ipfses: new_documentation,
-								carbon_footprint_suficit: BalanceOf::<T>::from(0u32),
-								carbon_footprint_deficit: old_account.carbon_footprint_deficit
-									+ change_amount,
-								creation_date: old_account.creation_date,
-							};
-						} else {
-							let change_amount = report.carbon_footprint_suficit
-								- new_account.carbon_footprint_deficit;
-
-							new_account = CarbonFootprintAccountInfo {
-								documentation_ipfses: new_documentation,
-								carbon_footprint_suficit: old_account.carbon_footprint_suficit
-									+ change_amount,
-								carbon_footprint_deficit: BalanceOf::<T>::from(0u32),
-								creation_date: old_account.creation_date,
-							};
-						}
-					} else {
-						if report.carbon_footprint_suficit >= old_account.carbon_footprint_deficit {
-							let change_amount = report.carbon_footprint_suficit
-								- old_account.carbon_footprint_deficit;
-
-							new_account = CarbonFootprintAccountInfo {
-								documentation_ipfses: new_documentation,
-								carbon_footprint_suficit: old_account.carbon_footprint_suficit
-									+ change_amount,
-								carbon_footprint_deficit: BalanceOf::<T>::from(0u32),
-								creation_date: old_account.creation_date,
-							};
-						} else {
-							let change_amount =
-								report.carbon_footprint_deficit - report.carbon_footprint_suficit;
-
-							new_account = CarbonFootprintAccountInfo {
-								documentation_ipfses: new_documentation,
-								carbon_footprint_suficit: BalanceOf::<T>::from(0u32),
-								carbon_footprint_deficit: old_account.carbon_footprint_deficit
-									+ change_amount,
-								creation_date: old_account.creation_date,
-							};
-						}
-					}
-				}
-
-				// Save the changes made to the carbon footprint account
-				CarbonFootprintAccounts::<T>::insert(report.cf_account.clone(), new_account);
-			}
-
-			// Create new report
-			// Note: Only change is made to the voting_active cycle status
-			let new_report = CarbonFootprintReportInfo {
-				cf_account: report.cf_account.clone(),
-				creation_date: report.creation_date,
-				carbon_footprint_suficit: report.carbon_footprint_suficit,
-				carbon_footprint_deficit: report.carbon_footprint_deficit,
-				votes_for: report.votes_for,
-				votes_against: report.votes_against,
-				voting_active: false,
-			};
-
-			// Save new report
-			CarbonFootprintReports::<T>::insert(ipfs, new_report);
-		}
-
-		// Update project proposal after voting ends
-		pub fn update_project_proposal(
-			proposal: ProjectProposalInfo<AccountIdOf<T>, MomentOf<T>>,
-			ipfs: BoundedString<T::IPFSLength>,
-		) {
-			// Get the votes that were made for the report
-			let votes_for: u16 = proposal.votes_for.len().try_into().unwrap();
-			let votes_against: u16 = proposal.votes_against.len().try_into().unwrap();
-			let votes_total: u16 = votes_for + votes_against;
-
-			// Check if the vote has passed
-			if Self::has_vote_passed(votes_total, votes_for) {
-				// Create a new project
-				let new_project = ProjectInfo {
-					documentation_ipfs: ipfs.clone(),
-					project_owner: proposal.project_owner.clone(),
-					creation_date: T::Time::now(),
-					penalty_level: 0,
-					penalty_timeout: BlockNumber::<T>::from(0u32),
-				};
-
-				// Save new project
-				Projects::<T>::insert(proposal.project_hash, new_project);
-			}
-
-			// Update proposal
-			// Note: Only change is made to the voting_active cycle status
-			let new_proposal = ProjectProposalInfo {
-				voting_active: false,
-				..proposal
-			};
-
-			// Save new proposal
-			ProjectProposals::<T>::insert(ipfs, new_proposal);
-		}
-
-		// Update carbon credit batch after voting ends
-		pub fn update_carbon_credit_batch(
-			proposal: CarbonCreditBatchProposalInfo<MomentOf<T>, BalanceOf<T>, AccountIdOf<T>>,
-			ipfs: BoundedString<T::IPFSLength>,
-		) {
-			// Get the votes that were made for the report
-			let votes_for: u16 = proposal.votes_for.len().try_into().unwrap();
-			let votes_against: u16 = proposal.votes_against.len().try_into().unwrap();
-			let votes_total: u16 = votes_for + votes_against;
-
-			// Check if the vote has passed
-			if Self::has_vote_passed(votes_total, votes_for) {
-				// Create a new project
-				let new_batch = CarbonCreditBatchInfo {
-					documentation_ipfs: ipfs.clone(),
-					project_hash: proposal.project_hash,
-					creation_date: T::Time::now(),
-					credit_amount: proposal.credit_amount,
-					penalty_repay_price: proposal.penalty_repay_price,
-					status: CarbonCreditBatchStatus::Active,
-					validator_benefactors: proposal.votes_for.clone(),
-				};
-
-				// Save new carbon credit batch
-				CarbonCreditBatches::<T>::insert(proposal.batch_hash, new_batch);
-
-				// Create carbon credit holdings for project owner
-				let new_holdings = CarbonCreditHoldingsInfo {
-					available_amount: proposal.credit_amount.into(),
-					unavailable_amount: BalanceOf::<T>::from(0u32),
-				};
-
-				// Get project owner accountID
-				let project = Projects::<T>::get(proposal.project_hash).unwrap();
-
-				// Save project owner carbon credit holdings
-				CarbonCreditHoldings::<T>::insert(
-					proposal.batch_hash,
-					project.project_owner,
-					new_holdings,
-				);
-			}
-
-			// Create new proposal
-			// Note: Only change is made to the voting_active cycle status
-			let new_proposal = CarbonCreditBatchProposalInfo {
-				voting_active: false,
-				..proposal
-			};
-
-			// Save new proposal
-			CarbonCreditBatchProposals::<T>::insert(ipfs, new_proposal);
-		}
-
-		// Update account complaints
-		pub fn update_account_complaints(
-			complaint: BoundedString<T::IPFSLength>,
-			counter: &mut u64,
-		) {
-			if ComplaintsForAccounts::<T>::contains_key(complaint.clone()) {
-				let mut specific_complaint =
-					ComplaintsForAccounts::<T>::get(complaint.clone()).unwrap();
-
-				specific_complaint =
-					ComplaintAccountBasedInfo { complaint_active: false, ..specific_complaint };
-
-				// Get the votes that were made for the report
-				let votes_for: u16 = specific_complaint.votes_for.len().try_into().unwrap();
-				let votes_against: u16 = specific_complaint.votes_against.len().try_into().unwrap();
-				let votes_total: u16 = votes_for + votes_against;
-
-				// Update penalties only if the complaint passed
-				if Self::has_vote_passed(votes_total, votes_for) {
-					let current_block = frame_system::Pallet::<T>::block_number();
-					let new_timeout_block =
-						current_block + PalletTimeValues::<T>::get().penalty_timeout;
-
-					// Match complaint type
-					match specific_complaint.complaint_type {
-						ComplaintType::ProjectOwnerComplaint => {
-							// Update values for project owner
-							let mut project_owner =
-								ProjectOwners::<T>::get(specific_complaint.clone().complaint_for)
-									.unwrap();
-
-							// Remove previous penalty timeout if it existed
-							if PenaltyTimeoutsAccounts::<T>::contains_key(
-								project_owner.penalty_timeout,
-							) {
-								let mut penalty_timeouts = PenaltyTimeoutsAccounts::<T>::get(
-									project_owner.penalty_timeout,
-								)
-								.unwrap();
-								penalty_timeouts.remove(&specific_complaint.clone().complaint_for);
-
-								PenaltyTimeoutsAccounts::<T>::insert(
-									project_owner.penalty_timeout,
-									penalty_timeouts,
-								);
-							}
-
-							project_owner = ProjectValidatorOrProjectOwnerInfo {
-								penalty_level: project_owner.penalty_level + 1,
-								penalty_timeout: new_timeout_block,
-								..project_owner
-							};
-
-							ProjectOwners::<T>::insert(
-								specific_complaint.clone().complaint_for,
-								project_owner,
-							);
-
-							// Unfreeze all batches
-							Self::unfreeze_all_owner_batches(
-								specific_complaint.clone().complaint_for,
-								counter,
-							);
-						},
-						ComplaintType::ValidatorComplaint => {
-							// Update values for validator
-							let mut validator =
-								Validators::<T>::get(specific_complaint.clone().complaint_for)
-									.unwrap();
-
-							// Remove previous penalty timeout if it existed
-							if PenaltyTimeoutsAccounts::<T>::contains_key(validator.penalty_timeout)
-							{
-								let mut penalty_timeouts =
-									PenaltyTimeoutsAccounts::<T>::get(validator.penalty_timeout)
-										.unwrap();
-								penalty_timeouts.remove(&specific_complaint.clone().complaint_for);
-
-								PenaltyTimeoutsAccounts::<T>::insert(
-									validator.penalty_timeout,
-									penalty_timeouts,
-								);
-							}
-
-							validator = ProjectValidatorOrProjectOwnerInfo {
-								penalty_level: validator.penalty_level + 1,
-								penalty_timeout: new_timeout_block,
-								..validator
-							};
-
-							Validators::<T>::insert(
-								specific_complaint.clone().complaint_for,
-								validator,
-							);
-						},
-						_ => {},
-					}
-
-					let mut penalty_timeouts =
-						PenaltyTimeoutsAccounts::<T>::get(new_timeout_block).unwrap();
-					penalty_timeouts.insert(specific_complaint.clone().complaint_for);
-
-					PenaltyTimeoutsAccounts::<T>::insert(new_timeout_block, penalty_timeouts);
-				}
-
-				ComplaintsForAccounts::<T>::insert(complaint, specific_complaint);
-
-				*counter += 1;
-			}
-		}
-
-		// Update hash complaints
-		pub fn update_hash_complaints(complaint: BoundedString<T::IPFSLength>, counter: &mut u64) {
-			if ComplaintsForHashes::<T>::contains_key(complaint.clone()) {
-				let mut specific_complaint =
-					ComplaintsForHashes::<T>::get(complaint.clone()).unwrap();
-
-				specific_complaint =
-					ComplaintHashBasedInfo { complaint_active: false, ..specific_complaint };
-
-				// Get the votes that were made for the report
-				let votes_for: u16 = specific_complaint.votes_for.len().try_into().unwrap();
-				let votes_against: u16 = specific_complaint.votes_against.len().try_into().unwrap();
-				let votes_total: u16 = votes_for + votes_against;
-
-				// Update penalties only if the complaint passed
-				if Self::has_vote_passed(votes_total, votes_for) {
-					let current_block = frame_system::Pallet::<T>::block_number();
-					let new_timeout_block =
-						current_block + PalletTimeValues::<T>::get().penalty_timeout;
-
-					// Match complaint type
-					match specific_complaint.complaint_type {
-						ComplaintType::CarbonCreditBatchComplaint => {
-							// Update values for carbon credit batch
-							let mut batch = CarbonCreditBatches::<T>::get(
-								specific_complaint.clone().complaint_for,
-							)
-							.unwrap();
-
-							batch = CarbonCreditBatchInfo {
-								status: CarbonCreditBatchStatus::Redacted,
-								..batch
-							};
-
-							CarbonCreditBatches::<T>::insert(
-								specific_complaint.clone().complaint_for,
-								batch,
-							);
-
-							// Recalculate carbon balances for CFAs
-							Self::recalculate_cfa_balances(
-								specific_complaint.clone().complaint_for,
-								counter,
-							);
-
-							// Calculate and save repayments needed for project owner
-							Self::calculate_project_owner_debts(
-								specific_complaint.clone().complaint_for,
-								counter,
-							);
-						},
-						ComplaintType::ProjectComplaint => {
-							// Update values for project
-							let mut project =
-								Projects::<T>::get(specific_complaint.clone().complaint_for)
-									.unwrap();
-
-							// Remove previous penalty timeout if it existed
-							if PenaltyTimeoutsHashes::<T>::contains_key(project.penalty_timeout) {
-								let mut penalty_timeouts =
-									PenaltyTimeoutsHashes::<T>::get(project.penalty_timeout)
-										.unwrap();
-								penalty_timeouts.remove(&specific_complaint.clone().complaint_for);
-
-								PenaltyTimeoutsHashes::<T>::insert(
-									project.penalty_timeout,
-									penalty_timeouts,
-								);
-							}
-
-							project = ProjectInfo {
-								penalty_level: project.penalty_level + 1,
-								penalty_timeout: new_timeout_block,
-								..project
-							};
-
-							Projects::<T>::insert(
-								specific_complaint.clone().complaint_for,
-								project,
-							);
-
-							Self::unfreeze_all_project_batches(
-								specific_complaint.clone().complaint_for,
-								counter,
-							);
-						},
-						_ => {},
-					}
-
-					let mut penalty_timeouts =
-						PenaltyTimeoutsHashes::<T>::get(new_timeout_block).unwrap();
-					penalty_timeouts.insert(specific_complaint.clone().complaint_for);
-
-					PenaltyTimeoutsHashes::<T>::insert(new_timeout_block, penalty_timeouts);
-				}
-
-				ComplaintsForHashes::<T>::insert(complaint, specific_complaint);
-
-				*counter += 1;
-			}
-		}
-
 		// Recalculate CFA balances
-		pub fn recalculate_cfa_balances(batch_hash: H256, counter: &mut u64) {
+		pub fn recalculate_cfa_balances(batch_hash: H256) {
 			for (_, retirement_info) in CarbonCreditRetirements::<T>::iter() {
 				if retirement_info.batch_hash == batch_hash {
 					let mut footprint_account = CarbonFootprintAccounts::<T>::get(
@@ -3359,14 +3583,12 @@ pub mod pallet {
 						retirement_info.carbon_footprint_account,
 						footprint_account,
 					);
-
-					*counter += 1;
 				}
 			}
 		}
 
 		// Calculate project owner standing debts
-		pub fn calculate_project_owner_debts(batch_hash: H256, counter: &mut u64) {
+		pub fn calculate_project_owner_debts(batch_hash: H256) {
 			let batch_info = CarbonCreditBatches::<T>::get(batch_hash).unwrap();
 			let project_info = Projects::<T>::get(batch_info.project_hash).unwrap();
 
@@ -3410,8 +3632,6 @@ pub mod pallet {
 					}
 				}
 			}
-
-			*counter += 1
 		}
 
 		// Check if vote has passed
@@ -3426,8 +3646,7 @@ pub mod pallet {
 				}
 			}
 
-			if vote_pass_ratio.upper_limit_part == vote_pass_ratio.proportion_part
-			{
+			if vote_pass_ratio.upper_limit_part == vote_pass_ratio.proportion_part {
 				if votes_for == total_votes {
 					return true;
 				} else {
@@ -3468,7 +3687,7 @@ pub mod pallet {
 		}
 
 		// Unfreeze all carbon credit batches for given project owner
-		pub fn unfreeze_all_owner_batches(project_owner: AccountIdOf<T>, counter: &mut u64) {
+		pub fn unfreeze_all_owner_batches(project_owner: AccountIdOf<T>) {
 			let mut project_hashes = BTreeSet::<H256>::new();
 
 			for (project_hash, project_info) in Projects::<T>::iter() {
@@ -3485,8 +3704,6 @@ pub mod pallet {
 					};
 
 					CarbonCreditBatches::<T>::insert(batch_hash, batch_info);
-
-					*counter += 1;
 				}
 			}
 		}
@@ -3506,7 +3723,7 @@ pub mod pallet {
 		}
 
 		// Unfreeze all carbon credit batches for given project
-		pub fn unfreeze_all_project_batches(project: H256, counter: &mut u64) {
+		pub fn unfreeze_all_project_batches(project: H256) {
 			for (batch_hash, mut batch_info) in CarbonCreditBatches::<T>::iter() {
 				if batch_info.project_hash == project {
 					batch_info = CarbonCreditBatchInfo {
@@ -3515,8 +3732,6 @@ pub mod pallet {
 					};
 
 					CarbonCreditBatches::<T>::insert(batch_hash, batch_info);
-
-					*counter += 1;
 				}
 			}
 		}
