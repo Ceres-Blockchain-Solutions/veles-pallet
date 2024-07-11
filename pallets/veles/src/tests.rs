@@ -5452,3 +5452,31 @@ fn repay_project_owner_debts_ok() {
 		assert_eq!(pallet_balances::Pallet::<Test>::free_balance(bob()), 130);
 	});
 }
+
+// Utility functions tests
+
+#[test]
+pub fn has_vote_passed_ok() {
+	new_test_ext().execute_with(|| {
+		// Example 1
+		assert_eq!(Veles::has_vote_passed(6, 4), true);
+		assert_eq!(Veles::has_vote_passed(6, 1), false);
+		assert_eq!(Veles::has_vote_passed(6, 5), true);
+
+		// Example 2
+		let new_pass_ration = ProportionStructure { proportion_part: 10, upper_limit_part: 0 };
+		VotePassRatio::<Test>::set(new_pass_ration);
+
+		assert_eq!(Veles::has_vote_passed(6, 4), true);
+		assert_eq!(Veles::has_vote_passed(6, 5), true);
+		assert_eq!(Veles::has_vote_passed(3, 1), false);
+
+		// // Example 3
+		let new_pass_ration = ProportionStructure { proportion_part: 1, upper_limit_part: 1 };
+		VotePassRatio::<Test>::set(new_pass_ration);
+
+		assert_eq!(Veles::has_vote_passed(6, 4), false);
+		assert_eq!(Veles::has_vote_passed(6, 6), true);
+		assert_eq!(Veles::has_vote_passed(2, 1), false);
+	});
+}
