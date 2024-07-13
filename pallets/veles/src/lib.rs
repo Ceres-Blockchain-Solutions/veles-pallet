@@ -3836,7 +3836,7 @@ pub mod pallet {
 				penalty_percentage = penalty_percentages[&account_info.penalty_level];
 			}
 
-			let actual_amount = penalty_percentage * amount / BalanceOf::<T>::from(10000u32);
+			let actual_amount = BalanceOf::<T>::from(10000u32) * amount / penalty_percentage;
 
 			actual_amount
 		}
@@ -3866,7 +3866,7 @@ pub mod pallet {
 				/ BalanceOf::<T>::from(10000u32);
 
 			// Calculate actual amount that needs to be paid
-			let actual_amount = penalty_percentage * amount / BalanceOf::<T>::from(10000u32);
+			let actual_amount = BalanceOf::<T>::from(10000u32) * amount / penalty_percentage;
 
 			actual_amount
 		}
