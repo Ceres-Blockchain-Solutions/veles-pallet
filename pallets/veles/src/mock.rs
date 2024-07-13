@@ -163,6 +163,7 @@ impl pallet_veles::Config for Test {
 	type UnsignedLongevity = ConstU64<100>;
 	type BlockFinalizationTime = BlockFinalizationTime;
 	type Currency = Balances;
+	type WeightInfo = ();
 }
 
 // Build genesis storage according to the mock runtime.
