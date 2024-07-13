@@ -275,6 +275,7 @@ impl pallet_veles::Config for Runtime {
 	type UnsignedPriority = OffchainWorkerTxPriority;
 	type UnsignedLongevity = OffchainWorkerTxLongevity;
 	type Currency = Balances;
+	type WeightInfo = pallet_veles::weights::SubstrateWeight<Runtime>;
 }
 
 // Create the runtime by composing the FRAME pallets that were previously configured.
@@ -366,6 +367,7 @@ mod benches {
 		[pallet_balances, Balances]
 		[pallet_timestamp, Timestamp]
 		[pallet_sudo, Sudo]
+		[pallet_veles, Veles]
 	);
 }
 

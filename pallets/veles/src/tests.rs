@@ -2,65 +2,6 @@ use crate::{mock::*, Error};
 use frame_support::{assert_err, assert_ok};
 
 #[test]
-fn update_base_pallet_time_zero_ok() {
-	new_test_ext().execute_with(|| {
-		// Check for base pallet time before block 1
-		let base_pallet_time = PalletTimeValues::<Test>::get().pallet_base_time;
-
-		assert_eq!(base_pallet_time, 0);
-
-		// Go past genesis block so events get deposited
-		run_to_block(1);
-
-		// Check for base pallet time on block 1
-		let base_pallet_time = PalletTimeValues::<Test>::get().pallet_base_time;
-
-		assert_eq!(base_pallet_time, 1);
-
-		// Go to block 10
-		run_to_block(10);
-
-		// Check for base pallet time on block 10
-		let base_pallet_time = PalletTimeValues::<Test>::get().pallet_base_time;
-
-		assert_eq!(base_pallet_time, 1);
-	});
-}
-
-#[test]
-fn update_base_pallet_time_new_year_ok() {
-	new_test_ext().execute_with(|| {
-		// Check for base pallet time before block 1
-		let base_pallet_time = PalletTimeValues::<Test>::get().pallet_base_time;
-
-		assert_eq!(base_pallet_time, 0);
-
-		// Go past genesis block so events get deposited
-		run_to_block(1);
-
-		// Check for base pallet time on block 1
-		let base_pallet_time = PalletTimeValues::<Test>::get().pallet_base_time;
-
-		assert_eq!(base_pallet_time, 1);
-
-		// Set number of block yearly
-		let mut pallet_time_values = PalletTimeValues::<Test>::get();
-
-		pallet_time_values = TimeValues { number_of_blocks_per_year: 100, ..pallet_time_values };
-
-		PalletTimeValues::<Test>::set(pallet_time_values);
-
-		// Go to block 110
-		run_to_block(110);
-
-		// Check for base pallet time on block 10
-		let base_pallet_time = PalletTimeValues::<Test>::get().pallet_base_time;
-
-		assert_eq!(base_pallet_time, 101);
-	});
-}
-
-#[test]
 fn update_vote_pass_ratio_unauthorized() {
 	new_test_ext().execute_with(|| {
 		// Go past genesis block so events get deposited
@@ -3689,7 +3630,7 @@ fn complete_sale_order_ok() {
 			penalty_level: 0,
 			penalty_timeout: 0,
 		};
-		
+
 		let project_hash = generate_hash(alice());
 
 		Projects::<Test>::insert(project_hash, project);
@@ -3700,15 +3641,13 @@ fn complete_sale_order_ok() {
 		validator_benefactors.insert(fred());
 
 		let credit_batch = CarbonCreditBatchInfo {
-			documentation_ipfs: BoundedString::<IPFSLength>::truncate_from(
-				"batch",
-			),
-			project_hash: project_hash,
+			documentation_ipfs: BoundedString::<IPFSLength>::truncate_from("batch"),
+			project_hash,
 			creation_date: <mock::Test as pallet::Config>::Time::now(),
 			credit_amount: BalanceOf::<Test>::from(100u32),
 			penalty_repay_price: BalanceOf::<Test>::from(10u32),
 			status: CarbonCreditBatchStatus::Active,
-			validator_benefactors: validator_benefactors,
+			validator_benefactors,
 		};
 
 		let batch_hash = generate_hash(bob());
@@ -5478,5 +5417,947 @@ pub fn has_vote_passed_ok() {
 		assert_eq!(Veles::has_vote_passed(6, 4), false);
 		assert_eq!(Veles::has_vote_passed(6, 6), true);
 		assert_eq!(Veles::has_vote_passed(2, 1), false);
+	});
+}
+
+// Offchain worker tests
+
+#[test]
+pub fn update_carbon_footprint_report_new_account_ok() {
+	new_test_ext().execute_with(|| {
+		// Insert carbon footprint report
+		let mut votes_for = BTreeSet::<AccountId>::new();
+		votes_for.insert(bob());
+
+		let report_info = CarbonFootprintReportInfo {
+			cf_account: alice(),
+			creation_date: <mock::Test as pallet::Config>::Time::now(),
+			carbon_footprint_suficit: BalanceOf::<Test>::from(0u32),
+			carbon_footprint_deficit: BalanceOf::<Test>::from(100u32),
+			votes_for: BTreeSet::<AccountId>::new(),
+			votes_against: BTreeSet::<AccountId>::new(),
+			voting_active: true,
+		};
+
+		let report_ipfs = BoundedString::<IPFSLength>::truncate_from("report_ipfs");
+
+		CarbonFootprintReports::<Test>::insert(report_ipfs.clone(), report_info);
+
+		// Successfully update carbon footprint report
+		assert_ok!(Veles::update_carbon_footprint_report(RuntimeOrigin::signed(charlie()), report_ipfs.clone()));
+
+		// Check if voting has closed
+		let report = CarbonFootprintReports::<Test>::get(report_ipfs.clone()).unwrap();
+
+		assert_eq!(report.voting_active, false);
+
+		// Check if carbon footprint account has been saved
+		let account = CarbonFootprintAccounts::<Test>::get(alice()).unwrap();
+
+		assert_eq!(account.documentation_ipfses.contains(&report_ipfs), true);
+		assert_eq!(account.carbon_footprint_suficit, 0);
+		assert_eq!(account.carbon_footprint_deficit, 100);
+		assert_eq!(account.creation_date, <mock::Test as pallet::Config>::Time::now());
+	});
+}
+
+#[test]
+pub fn update_carbon_footprint_report_old_account_ok() {
+	new_test_ext().execute_with(|| {
+		// Insert carbon footprint account
+		let mut documentation_ipfses = BTreeSet::<BoundedString<IPFSLength>>::new();
+		let report_1_ipfs = BoundedString::<IPFSLength>::truncate_from("report_1_ipfs");
+		documentation_ipfses.insert(report_1_ipfs.clone());
+
+		let cf_account = CarbonFootprintAccountInfo {
+			documentation_ipfses: documentation_ipfses,
+			carbon_footprint_suficit: BalanceOf::<Test>::from(50u32),
+			carbon_footprint_deficit: BalanceOf::<Test>::from(0u32),
+			creation_date: <mock::Test as pallet::Config>::Time::now(),
+		};
+
+		CarbonFootprintAccounts::<Test>::insert(alice(), cf_account);
+
+		// Insert carbon footprint report
+		let mut votes_for = BTreeSet::<AccountId>::new();
+		votes_for.insert(bob());
+
+		let report_info = CarbonFootprintReportInfo {
+			cf_account: alice(),
+			creation_date: <mock::Test as pallet::Config>::Time::now(),
+			carbon_footprint_suficit: BalanceOf::<Test>::from(0u32),
+			carbon_footprint_deficit: BalanceOf::<Test>::from(100u32),
+			votes_for: BTreeSet::<AccountId>::new(),
+			votes_against: BTreeSet::<AccountId>::new(),
+			voting_active: true,
+		};
+
+		let report_2_ipfs = BoundedString::<IPFSLength>::truncate_from("report_2_ipfs");
+
+		CarbonFootprintReports::<Test>::insert(report_2_ipfs.clone(), report_info);
+
+		// Successfully update carbon footprint report
+		assert_ok!(Veles::update_carbon_footprint_report(RuntimeOrigin::signed(charlie()), report_2_ipfs.clone()));
+
+		// Check if voting has closed
+		let report = CarbonFootprintReports::<Test>::get(report_2_ipfs.clone()).unwrap();
+
+		assert_eq!(report.voting_active, false);
+
+		// Check if carbon footprint account has been saved
+		let account = CarbonFootprintAccounts::<Test>::get(alice()).unwrap();
+
+		assert_eq!(account.documentation_ipfses.contains(&report_1_ipfs), true);
+		assert_eq!(account.documentation_ipfses.contains(&report_2_ipfs), true);
+		assert_eq!(account.carbon_footprint_suficit, 0);
+		assert_eq!(account.carbon_footprint_deficit, 50);
+		assert_eq!(account.creation_date, <mock::Test as pallet::Config>::Time::now());
+	});
+}
+
+#[test]
+pub fn update_project_proposal_ok() {
+	new_test_ext().execute_with(|| {
+		// Insert carbon footprint report
+		let mut votes_for = BTreeSet::<AccountId>::new();
+		votes_for.insert(bob());
+
+		let project_hash = generate_hash(alice());
+
+		let proposal = ProjectProposalInfo {
+			project_owner: alice(),
+			creation_date: <mock::Test as pallet::Config>::Time::now(),
+			project_hash: project_hash,
+			votes_for: votes_for,
+			votes_against: BTreeSet::<AccountId>::new(),
+			voting_active: true,
+		};
+
+		let proposal_ipfs = BoundedString::<IPFSLength>::truncate_from("proposal_ipfs");
+
+		ProjectProposals::<Test>::insert(proposal_ipfs.clone(), proposal);
+
+		// Successfully update project proposal
+		assert_ok!(Veles::update_project_proposal(RuntimeOrigin::signed(charlie()), proposal_ipfs.clone()));
+
+		// Check if voting has closed
+		let proposal = ProjectProposals::<Test>::get(proposal_ipfs.clone()).unwrap();
+
+		assert_eq!(proposal.voting_active, false);
+
+		// Check if project has been saved
+		let project = Projects::<Test>::get(project_hash).unwrap();
+
+		assert_eq!(project.documentation_ipfs, proposal_ipfs);
+		assert_eq!(project.project_owner, alice());
+		assert_eq!(project.creation_date, <mock::Test as pallet::Config>::Time::now());
+		assert_eq!(project.penalty_level, 0);
+		assert_eq!(project.penalty_timeout, BlockNumber::<Test>::from(0u32));
+	});
+}
+
+#[test]
+pub fn update_project_penalty_level_zero_penalty_level_ok() {
+	new_test_ext().execute_with(|| {
+		// Insert project
+		let project_hash = generate_hash(alice());
+
+		let project_info = ProjectInfo {
+			documentation_ipfs: BoundedString::<IPFSLength>::truncate_from("project_ipfs"),
+			project_owner: alice(),
+			creation_date: <mock::Test as pallet::Config>::Time::now(),
+			penalty_level: 1,
+			penalty_timeout: BlockNumber::<Test>::from(120u32),
+		};
+
+		Projects::<Test>::insert(project_hash, project_info);
+
+		// Successfully update project penalty level
+		assert_ok!(Veles::update_project_penalty_level(RuntimeOrigin::signed(alice()), project_hash));
+
+		// Check if project penalty level has been updated
+		let project = Projects::<Test>::get(project_hash).unwrap();
+
+		assert_eq!(project.penalty_level, 0);
+		assert_eq!(project.penalty_timeout, 0);
+	});
+}
+
+#[test]
+pub fn update_project_penalty_level_non_zero_penalty_level_ok() {
+	new_test_ext().execute_with(|| {
+		// Insert project
+		let project_hash = generate_hash(alice());
+
+		let project_info = ProjectInfo {
+			documentation_ipfs: BoundedString::<IPFSLength>::truncate_from("project_ipfs"),
+			project_owner: alice(),
+			creation_date: <mock::Test as pallet::Config>::Time::now(),
+			penalty_level: 2,
+			penalty_timeout: BlockNumber::<Test>::from(320u32),
+		};
+
+		Projects::<Test>::insert(project_hash, project_info);
+
+		// Successfully update project penalty level
+		assert_ok!(Veles::update_project_penalty_level(RuntimeOrigin::signed(alice()), project_hash));
+
+		// Check if project penalty level has been updated
+		let project = Projects::<Test>::get(project_hash).unwrap();
+
+		assert_eq!(project.penalty_level, 1);
+		assert_eq!(project.penalty_timeout, 446400);
+	});
+}
+
+#[test]
+pub fn update_validator_penalty_level_zero_penalty_level_ok() {
+	new_test_ext().execute_with(|| {
+		// Insert validator
+		let validator_info = ProjectValidatorOrProjectOwnerInfo {
+			documentation_ipfs: BoundedString::<IPFSLength>::truncate_from("documentation_ipfs"),
+			penalty_level: 1,
+			penalty_timeout: BlockNumber::<Test>::from(120u32),
+		};
+
+		Validators::<Test>::insert(alice(), validator_info);
+
+		// Successfully update validator penalty level
+		assert_ok!(Veles::update_validator_penalty_level(RuntimeOrigin::signed(alice()), alice()));
+
+		// Check if validator penalty level has been updated
+		let validator = Validators::<Test>::get(alice()).unwrap();
+
+		assert_eq!(validator.penalty_level, 0);
+		assert_eq!(validator.penalty_timeout, 0);
+	});
+}
+
+#[test]
+pub fn update_validator_penalty_level_non_zero_penalty_level_ok() {
+	new_test_ext().execute_with(|| {
+		// Insert validator
+		let validator_info = ProjectValidatorOrProjectOwnerInfo {
+			documentation_ipfs: BoundedString::<IPFSLength>::truncate_from("documentation_ipfs"),
+			penalty_level: 2,
+			penalty_timeout: BlockNumber::<Test>::from(120u32),
+		};
+
+		Validators::<Test>::insert(alice(), validator_info);
+
+		// Successfully update validator penalty level
+		assert_ok!(Veles::update_validator_penalty_level(RuntimeOrigin::signed(alice()), alice()));
+
+		// Check if validator penalty level has been updated
+		let validator = Validators::<Test>::get(alice()).unwrap();
+
+		assert_eq!(validator.penalty_level, 1);
+		assert_eq!(validator.penalty_timeout, 446400);
+	});
+}
+
+#[test]
+pub fn update_project_owner_penalty_level_zero_penalty_level_ok() {
+	new_test_ext().execute_with(|| {
+		// Insert project owner
+		let project_owner_info = ProjectValidatorOrProjectOwnerInfo {
+			documentation_ipfs: BoundedString::<IPFSLength>::truncate_from("documentation_ipfs"),
+			penalty_level: 1,
+			penalty_timeout: BlockNumber::<Test>::from(120u32),
+		};
+
+		ProjectOwners::<Test>::insert(alice(), project_owner_info);
+
+		// Successfully update project owner penalty level
+		assert_ok!(Veles::update_project_owner_penalty_level(RuntimeOrigin::signed(alice()), alice()));
+
+		// Check if project owner penalty level has been updated
+		let project_owner_info = ProjectOwners::<Test>::get(alice()).unwrap();
+
+		assert_eq!(project_owner_info.penalty_level, 0);
+		assert_eq!(project_owner_info.penalty_timeout, 0);
+	});
+}
+
+#[test]
+pub fn update_project_owner_penalty_level_non_zero_penalty_level_ok() {
+	new_test_ext().execute_with(|| {
+		// Insert project owner
+		let project_owner_info = ProjectValidatorOrProjectOwnerInfo {
+			documentation_ipfs: BoundedString::<IPFSLength>::truncate_from("documentation_ipfs"),
+			penalty_level: 2,
+			penalty_timeout: BlockNumber::<Test>::from(120u32),
+		};
+
+		ProjectOwners::<Test>::insert(alice(), project_owner_info);
+
+		// Successfully update project owner penalty level
+		assert_ok!(Veles::update_project_owner_penalty_level(RuntimeOrigin::signed(alice()), alice()));
+
+		// Check if project owner penalty level has been updated
+		let project_owner_info = ProjectOwners::<Test>::get(alice()).unwrap();
+
+		assert_eq!(project_owner_info.penalty_level, 1);
+		assert_eq!(project_owner_info.penalty_timeout, 446400);
+	});
+}
+
+#[test]
+pub fn update_carbon_credit_sale_order_ok() {
+	new_test_ext().execute_with(|| {
+		// Insert trader account
+		let mut new_traders = TraderAccounts::<Test>::get();
+		new_traders.insert(alice());
+		TraderAccounts::<Test>::set(new_traders);
+
+		// Insert carbon credit holdings 
+		let batch_hash = generate_hash(alice());
+
+		let credit_holdings = CarbonCreditHoldingsInfo {
+			available_amount: BalanceOf::<Test>::from(20u32),
+			unavailable_amount: BalanceOf::<Test>::from(15u32),
+		};
+
+		CarbonCreditHoldings::<Test>::insert(batch_hash, alice(), credit_holdings);
+
+		// Insert sale order
+		let sale_order = CarbonCreditSaleOrderInfo {
+			batch_hash: batch_hash,
+			credit_amount: BalanceOf::<Test>::from(10u32),
+			credit_price: BalanceOf::<Test>::from(5u32),
+			seller: alice(),
+			buyer: alice(),
+			sale_active: true,
+			sale_timeout: BlockNumber::<Test>::from(10u32),
+		};
+
+		let sale_hash = generate_hash(charlie());
+
+		CarbonCreditSaleOrders::<Test>::insert(sale_hash, sale_order);
+
+		// Successfully update carbon credit sale order
+		assert_ok!(Veles::update_carbon_credit_sale_order(RuntimeOrigin::signed(alice()), sale_hash));
+
+		// Check if the carbon credit sale order has been updated
+		let sale_order = CarbonCreditSaleOrders::<Test>::get(sale_hash).unwrap();
+
+		assert_eq!(sale_order.sale_active, false);
+	
+		// Check if the carbon credit holdings have been updated
+		let credit_holdings = CarbonCreditHoldings::<Test>::get(batch_hash, alice()).unwrap();
+
+		assert_eq!(credit_holdings.available_amount, BalanceOf::<Test>::from(30u32));
+		assert_eq!(credit_holdings.unavailable_amount, BalanceOf::<Test>::from(5u32));
+	});
+}
+
+#[test]
+pub fn update_carbon_credit_batch_proposal_ok() {
+	new_test_ext().execute_with(|| {
+		// Insert project owner
+		let project_owner_info = ProjectValidatorOrProjectOwnerInfo {
+			documentation_ipfs: BoundedString::<IPFSLength>::truncate_from("documentation_ipfs"),
+			penalty_level: 0,
+			penalty_timeout: BlockNumber::<Test>::from(0u32),
+		};
+
+		ProjectOwners::<Test>::insert(alice(), project_owner_info);
+
+		// Insert project
+		let project_hash = generate_hash(bob());
+
+		let project_documentation_ipfs =
+			BoundedString::<IPFSLength>::truncate_from("project_documentation_ipfs");
+
+		let project = ProjectInfo {
+			documentation_ipfs: project_documentation_ipfs,
+			project_owner: alice(),
+			creation_date: <mock::Test as pallet::Config>::Time::now(),
+			penalty_level: 0,
+			penalty_timeout: BlockNumber::<Test>::from(0u32),
+		};
+
+		Projects::<Test>::insert(project_hash, project);
+
+		// Insert carbon credit batch proposal
+		let proposal_ipfs = BoundedString::<IPFSLength>::truncate_from("proposal_ipfs");
+
+		let batch_hash = generate_hash(charlie());
+
+		let mut votes_for = BTreeSet::<AccountId>::new();
+		votes_for.insert(bob());
+
+		let proposal = CarbonCreditBatchProposalInfo {
+			project_hash,
+			batch_hash,
+			creation_date: <mock::Test as pallet::Config>::Time::now(),
+			credit_amount: 100u32.into(),
+			penalty_repay_price: 5u32.into(),
+			votes_for: votes_for,
+			votes_against: BTreeSet::<AccountId>::new(),
+			voting_active: true,
+		};
+
+		CarbonCreditBatchProposals::<Test>::insert(proposal_ipfs.clone(), proposal);
+
+		// Successfully update carbon credit batch proposal
+		assert_ok!(Veles::update_carbon_credit_batch_proposal(RuntimeOrigin::signed(alice()), proposal_ipfs.clone()));
+
+		// Check if the carbon credit batch proposal has been updated
+		let proposal = CarbonCreditBatchProposals::<Test>::get(proposal_ipfs).unwrap();
+
+		assert_eq!(proposal.voting_active, false);
+
+		// Chech if the carbon credit holdings has been updated
+		let credit_holdings = CarbonCreditHoldings::<Test>::get(batch_hash, alice()).unwrap();
+
+		assert_eq!(credit_holdings.available_amount, BalanceOf::<Test>::from(100u32));
+		assert_eq!(credit_holdings.unavailable_amount, BalanceOf::<Test>::from(0u32));
+	});
+}
+
+#[test]
+pub fn update_complaint_for_account_project_owner_zero_level_ok() {
+	new_test_ext().execute_with(|| {
+		// Insert project owner
+		let project_owner_info = ProjectValidatorOrProjectOwnerInfo {
+			documentation_ipfs: BoundedString::<IPFSLength>::truncate_from("documentation_ipfs"),
+			penalty_level: 0,
+			penalty_timeout: BlockNumber::<Test>::from(0u32),
+		};
+
+		ProjectOwners::<Test>::insert(alice(), project_owner_info);
+
+		// Insert complaint for account type
+		let complaint_ipfs = BoundedString::<IPFSLength>::truncate_from("complaint_ipfs");
+
+		let mut votes_for = BTreeSet::<AccountId>::new();
+		votes_for.insert(charlie());
+
+		let complaint = ComplaintAccountBasedInfo {
+			complaint_proposer: bob(),
+			complaint_type: ComplaintType::ProjectOwnerComplaint,
+			complaint_for: alice(),
+			creation_date: <mock::Test as pallet::Config>::Time::now(),
+			votes_for: votes_for,
+			votes_against: BTreeSet::<AccountIdOf<Test>>::new(),
+			complaint_active: true,
+		};
+
+		ComplaintsForAccounts::<Test>::insert(complaint_ipfs.clone(), complaint);
+
+		// Successfully update complaint for account
+		assert_ok!(Veles::update_complaint_for_account(RuntimeOrigin::signed(alice()), complaint_ipfs.clone()));
+
+		// Check if the complaint has been updated
+		let complaint = ComplaintsForAccounts::<Test>::get(complaint_ipfs.clone()).unwrap();
+
+		assert_eq!(complaint.complaint_active, false);
+
+		// Check if the project owner has been updated
+		let project_owner_info = ProjectOwners::<Test>::get(alice()).unwrap();
+
+		assert_eq!(project_owner_info.penalty_level, 1);
+		assert_eq!(project_owner_info.penalty_timeout, 446400);
+
+		// Check if the penalty timeouts have updated
+		let penalty_timeouts = PenaltyTimeoutsAccounts::<Test>::get(446400).unwrap();
+
+		assert_eq!(penalty_timeouts.contains(&alice()), true);
+	});
+}
+
+#[test]
+pub fn update_complaint_for_account_project_owner_non_zero_level_ok() {
+	new_test_ext().execute_with(|| {
+		// Insert project owner
+		let project_owner_info = ProjectValidatorOrProjectOwnerInfo {
+			documentation_ipfs: BoundedString::<IPFSLength>::truncate_from("documentation_ipfs"),
+			penalty_level: 1,
+			penalty_timeout: BlockNumber::<Test>::from(120u32),
+		};
+
+		ProjectOwners::<Test>::insert(alice(), project_owner_info);
+
+		// Insert complaint for account type
+		let complaint_ipfs = BoundedString::<IPFSLength>::truncate_from("complaint_ipfs");
+
+		let mut votes_for = BTreeSet::<AccountId>::new();
+		votes_for.insert(charlie());
+
+		let complaint = ComplaintAccountBasedInfo {
+			complaint_proposer: bob(),
+			complaint_type: ComplaintType::ProjectOwnerComplaint,
+			complaint_for: alice(),
+			creation_date: <mock::Test as pallet::Config>::Time::now(),
+			votes_for: votes_for,
+			votes_against: BTreeSet::<AccountIdOf<Test>>::new(),
+			complaint_active: true,
+		};
+
+		ComplaintsForAccounts::<Test>::insert(complaint_ipfs.clone(), complaint);
+
+		// Insert penalty timeout
+		let mut penalty_accounts = BTreeSet::<AccountIdOf<Test>>::new();
+		penalty_accounts.insert(alice());
+
+		PenaltyTimeoutsAccounts::<Test>::insert(120, penalty_accounts);
+
+		// Successfully update complaint for account
+		assert_ok!(Veles::update_complaint_for_account(RuntimeOrigin::signed(alice()), complaint_ipfs.clone()));
+
+		// Check if the complaint has been updated
+		let complaint = ComplaintsForAccounts::<Test>::get(complaint_ipfs.clone()).unwrap();
+
+		assert_eq!(complaint.complaint_active, false);
+
+		// Check if the project owner has been updated
+		let project_owner_info = ProjectOwners::<Test>::get(alice()).unwrap();
+
+		assert_eq!(project_owner_info.penalty_level, 2);
+		assert_eq!(project_owner_info.penalty_timeout, 446400);
+
+		// Check if the new penalty timeouts have updated
+		let penalty_timeouts = PenaltyTimeoutsAccounts::<Test>::get(446400).unwrap();
+
+		assert_eq!(penalty_timeouts.contains(&alice()), true);
+
+		// Check if the old penalty timeouts have updated
+		let penalty_timeouts = PenaltyTimeoutsAccounts::<Test>::get(120).unwrap();
+
+		assert_eq!(penalty_timeouts.contains(&alice()), false);
+	});
+}
+
+#[test]
+pub fn update_complaint_for_account_validator_zero_level_ok() {
+	new_test_ext().execute_with(|| {
+		// Insert validator
+		let validator_info = ProjectValidatorOrProjectOwnerInfo {
+			documentation_ipfs: BoundedString::<IPFSLength>::truncate_from("documentation_ipfs"),
+			penalty_level: 0,
+			penalty_timeout: BlockNumber::<Test>::from(0u32),
+		};
+
+		Validators::<Test>::insert(alice(), validator_info);
+
+		// Insert complaint for account type
+		let complaint_ipfs = BoundedString::<IPFSLength>::truncate_from("complaint_ipfs");
+
+		let mut votes_for = BTreeSet::<AccountId>::new();
+		votes_for.insert(charlie());
+
+		let complaint = ComplaintAccountBasedInfo {
+			complaint_proposer: bob(),
+			complaint_type: ComplaintType::ValidatorComplaint,
+			complaint_for: alice(),
+			creation_date: <mock::Test as pallet::Config>::Time::now(),
+			votes_for: votes_for,
+			votes_against: BTreeSet::<AccountIdOf<Test>>::new(),
+			complaint_active: true,
+		};
+
+		ComplaintsForAccounts::<Test>::insert(complaint_ipfs.clone(), complaint);
+
+		// Successfully update complaint for account
+		assert_ok!(Veles::update_complaint_for_account(RuntimeOrigin::signed(alice()), complaint_ipfs.clone()));
+
+		// Check if the complaint has been updated
+		let complaint = ComplaintsForAccounts::<Test>::get(complaint_ipfs.clone()).unwrap();
+
+		assert_eq!(complaint.complaint_active, false);
+
+		// Check if the project owner has been updated
+		let validator_info = Validators::<Test>::get(alice()).unwrap();
+
+		assert_eq!(validator_info.penalty_level, 1);
+		assert_eq!(validator_info.penalty_timeout, 446400);
+
+		// Check if the penalty timeouts have updated
+		let penalty_timeouts = PenaltyTimeoutsAccounts::<Test>::get(446400).unwrap();
+
+		assert_eq!(penalty_timeouts.contains(&alice()), true);
+	});
+}
+
+#[test]
+pub fn update_complaint_for_account_validator_non_zero_level_ok() {
+	new_test_ext().execute_with(|| {
+		// Insert validator
+		let validator_info = ProjectValidatorOrProjectOwnerInfo {
+			documentation_ipfs: BoundedString::<IPFSLength>::truncate_from("documentation_ipfs"),
+			penalty_level: 1,
+			penalty_timeout: BlockNumber::<Test>::from(120u32),
+		};
+
+		Validators::<Test>::insert(alice(), validator_info);
+
+		// Insert complaint for account type
+		let complaint_ipfs = BoundedString::<IPFSLength>::truncate_from("complaint_ipfs");
+
+		let mut votes_for = BTreeSet::<AccountId>::new();
+		votes_for.insert(charlie());
+
+		let complaint = ComplaintAccountBasedInfo {
+			complaint_proposer: bob(),
+			complaint_type: ComplaintType::ValidatorComplaint,
+			complaint_for: alice(),
+			creation_date: <mock::Test as pallet::Config>::Time::now(),
+			votes_for: votes_for,
+			votes_against: BTreeSet::<AccountIdOf<Test>>::new(),
+			complaint_active: true,
+		};
+
+		ComplaintsForAccounts::<Test>::insert(complaint_ipfs.clone(), complaint);
+
+		// Insert penalty timeout
+		let mut penalty_accounts = BTreeSet::<AccountIdOf<Test>>::new();
+		penalty_accounts.insert(alice());
+
+		PenaltyTimeoutsAccounts::<Test>::insert(120, penalty_accounts);
+
+		// Successfully update complaint for account
+		assert_ok!(Veles::update_complaint_for_account(RuntimeOrigin::signed(alice()), complaint_ipfs.clone()));
+
+		// Check if the complaint has been updated
+		let complaint = ComplaintsForAccounts::<Test>::get(complaint_ipfs.clone()).unwrap();
+
+		assert_eq!(complaint.complaint_active, false);
+
+		// Check if the project owner has been updated
+		let validator_info = Validators::<Test>::get(alice()).unwrap();
+
+		assert_eq!(validator_info.penalty_level, 2);
+		assert_eq!(validator_info.penalty_timeout, 446400);
+
+		// Check if the new penalty timeouts have updated
+		let penalty_timeouts = PenaltyTimeoutsAccounts::<Test>::get(446400).unwrap();
+
+		assert_eq!(penalty_timeouts.contains(&alice()), true);
+
+		// Check if the old penalty timeouts have updated
+		let penalty_timeouts = PenaltyTimeoutsAccounts::<Test>::get(120).unwrap();
+
+		assert_eq!(penalty_timeouts.contains(&alice()), false);
+	});
+}
+
+#[test]
+pub fn update_complaint_for_hash_project_zero_level_ok() {
+	new_test_ext().execute_with(|| {
+		// Insert project
+		let project_hash = generate_hash(alice());
+
+		let project_documentation_ipfs =
+			BoundedString::<IPFSLength>::truncate_from("project_documentation_ipfs");
+
+		let project_info = ProjectInfo {
+			documentation_ipfs: project_documentation_ipfs,
+			project_owner: alice(),
+			creation_date: <mock::Test as pallet::Config>::Time::now(),
+			penalty_level: 0,
+			penalty_timeout: BlockNumber::<Test>::from(0u32),
+		};
+
+		Projects::<Test>::insert(project_hash, project_info);
+	
+		// Insert complaint for hash type
+		let complaint_ipfs = BoundedString::<IPFSLength>::truncate_from("complaint_ipfs");
+
+		let mut votes_for = BTreeSet::<AccountId>::new();
+		votes_for.insert(charlie());
+
+		let complaint = ComplaintHashBasedInfo {
+			complaint_proposer: bob(),
+			complaint_type: ComplaintType::ProjectComplaint,
+			complaint_for: project_hash,
+			creation_date: <mock::Test as pallet::Config>::Time::now(),
+			votes_for: votes_for,
+			votes_against: BTreeSet::<AccountIdOf<Test>>::new(),
+			complaint_active: true,
+		};
+
+		ComplaintsForHashes::<Test>::insert(complaint_ipfs.clone(), complaint);
+
+		// Successfully update complaint for hash
+		assert_ok!(Veles::update_complaint_for_hash(RuntimeOrigin::signed(alice()), complaint_ipfs.clone()));
+
+		// Check if the complaint has been updated
+		let complaint = ComplaintsForHashes::<Test>::get(complaint_ipfs.clone()).unwrap();
+
+		assert_eq!(complaint.complaint_active, false);
+
+		// Check if the project has been updated
+		let project_info = Projects::<Test>::get(project_hash).unwrap();
+
+		assert_eq!(project_info.penalty_level, 1);
+		assert_eq!(project_info.penalty_timeout, 446400);
+
+		// Check if the penalty timeouts have updated
+		let penalty_timeouts = PenaltyTimeoutsHashes::<Test>::get(446400).unwrap();
+
+		assert_eq!(penalty_timeouts.contains(&project_hash), true);
+	});
+}
+
+#[test]
+pub fn update_complaint_for_hash_project_non_zero_level_ok() {
+	new_test_ext().execute_with(|| {
+		// Insert project
+		let project_hash = generate_hash(alice());
+
+		let project_documentation_ipfs =
+			BoundedString::<IPFSLength>::truncate_from("project_documentation_ipfs");
+
+		let project_info = ProjectInfo {
+			documentation_ipfs: project_documentation_ipfs,
+			project_owner: alice(),
+			creation_date: <mock::Test as pallet::Config>::Time::now(),
+			penalty_level: 1,
+			penalty_timeout: BlockNumber::<Test>::from(120u32),
+		};
+
+		Projects::<Test>::insert(project_hash, project_info);
+	
+		// Insert complaint for hash type
+		let complaint_ipfs = BoundedString::<IPFSLength>::truncate_from("complaint_ipfs");
+
+		let mut votes_for = BTreeSet::<AccountId>::new();
+		votes_for.insert(charlie());
+
+		let complaint = ComplaintHashBasedInfo {
+			complaint_proposer: bob(),
+			complaint_type: ComplaintType::ProjectComplaint,
+			complaint_for: project_hash,
+			creation_date: <mock::Test as pallet::Config>::Time::now(),
+			votes_for: votes_for,
+			votes_against: BTreeSet::<AccountIdOf<Test>>::new(),
+			complaint_active: true,
+		};
+
+		ComplaintsForHashes::<Test>::insert(complaint_ipfs.clone(), complaint);
+
+		// Insert penalty timeout
+		let mut penalty_hashes = BTreeSet::<H256>::new();
+		penalty_hashes.insert(project_hash);
+
+		PenaltyTimeoutsHashes::<Test>::insert(120, penalty_hashes);
+
+		// Successfully update complaint for hash
+		assert_ok!(Veles::update_complaint_for_hash(RuntimeOrigin::signed(alice()), complaint_ipfs.clone()));
+
+		// Check if the complaint has been updated
+		let complaint = ComplaintsForHashes::<Test>::get(complaint_ipfs.clone()).unwrap();
+
+		assert_eq!(complaint.complaint_active, false);
+
+		// Check if the project has been updated
+		let project_info = Projects::<Test>::get(project_hash).unwrap();
+
+		assert_eq!(project_info.penalty_level, 2);
+		assert_eq!(project_info.penalty_timeout, 446400);
+
+		// Check if the new penalty timeouts have updated
+		let penalty_timeouts = PenaltyTimeoutsHashes::<Test>::get(446400).unwrap();
+
+		assert_eq!(penalty_timeouts.contains(&project_hash), true);
+
+		// Check if the old penalty timeouts have updated
+		let penalty_timeouts = PenaltyTimeoutsHashes::<Test>::get(120).unwrap();
+
+		assert_eq!(penalty_timeouts.contains(&project_hash), false);
+	});
+}
+
+#[test]
+pub fn update_complaint_for_hash_carbon_credit_batch_ok() {
+	new_test_ext().execute_with(|| {
+		let project_hash = generate_hash(alice());
+		let batch_hash = generate_hash(bob());
+
+		// Insert project owner
+		let owner_documentation_ipfs =
+			BoundedString::<IPFSLength>::truncate_from("owner_documentation_ipfs");
+
+		let project_owner = ProjectValidatorOrProjectOwnerInfo {
+			documentation_ipfs: owner_documentation_ipfs.clone(),
+			penalty_level: 0,
+			penalty_timeout: 0,
+		};
+
+		ProjectOwners::<Test>::insert(alice(), project_owner);
+
+		// Insert project
+		let project_documentation =
+			BoundedString::<IPFSLength>::truncate_from("project_documentation");
+
+		let project = ProjectInfo {
+			documentation_ipfs: project_documentation,
+			project_owner: alice(),
+			creation_date: <mock::Test as pallet::Config>::Time::now(),
+			penalty_level: 0u8,
+			penalty_timeout: BlockNumber::<Test>::from(0u32),
+		};
+
+		Projects::<Test>::insert(project_hash, project);
+
+		// Insert carbon credit batch
+		let batch_documentation_ipfs =
+			BoundedString::<IPFSLength>::truncate_from("batch_documentation_ipfs");
+
+		let batch = CarbonCreditBatchInfo {
+			documentation_ipfs: batch_documentation_ipfs,
+			project_hash,
+			creation_date: <mock::Test as pallet::Config>::Time::now(),
+			credit_amount: BalanceOf::<Test>::from(10000u32),
+			penalty_repay_price: BalanceOf::<Test>::from(2u32),
+			status: CarbonCreditBatchStatus::Active,
+			validator_benefactors: BTreeSet::<AccountIdOf<Test>>::new(),
+		};
+
+		CarbonCreditBatches::<Test>::insert(batch_hash, batch);
+
+		// Insert carbon credit holdings (owner)
+		let credit_holdings = CarbonCreditHoldingsInfo {
+			available_amount: BalanceOf::<Test>::from(120u32),
+			unavailable_amount: BalanceOf::<Test>::from(10u32),
+		};
+
+		CarbonCreditHoldings::<Test>::insert(batch_hash, alice(), credit_holdings);
+
+		// Insert carbon footprint account (#1)
+		let mut documentation_ipfses_1 = BTreeSet::<BoundedString<IPFSLength>>::new();
+		let documentation_ipfs_1 = BoundedString::<IPFSLength>::truncate_from("documentation_ipfs_1");
+
+		documentation_ipfses_1.insert(documentation_ipfs_1);
+
+		let carbon_footprint_account_1 = CarbonFootprintAccountInfo {
+			documentation_ipfses: documentation_ipfses_1,
+			carbon_footprint_suficit: BalanceOf::<Test>::from(50u32),
+			carbon_footprint_deficit: BalanceOf::<Test>::from(0u32),
+			creation_date: <mock::Test as pallet::Config>::Time::now(),
+		};
+
+		CarbonFootprintAccounts::<Test>::insert(bob(), carbon_footprint_account_1);
+
+		// Insert carbon footprint account (#2)
+		let mut documentation_ipfses_2 = BTreeSet::<BoundedString<IPFSLength>>::new();
+		let documentation_ipfs_2 = BoundedString::<IPFSLength>::truncate_from("documentation_ipfs_2");
+
+		documentation_ipfses_2.insert(documentation_ipfs_2);
+
+		let carbon_footprint_account_2 = CarbonFootprintAccountInfo {
+			documentation_ipfses: documentation_ipfses_2,
+			carbon_footprint_suficit: BalanceOf::<Test>::from(0u32),
+			carbon_footprint_deficit: BalanceOf::<Test>::from(1000u32),
+			creation_date: <mock::Test as pallet::Config>::Time::now(),
+		};
+
+		CarbonFootprintAccounts::<Test>::insert(charlie(), carbon_footprint_account_2);
+
+		// Insert retirement (#1)
+		let retirement_hash_1 = generate_hash(dave());
+
+		let retirement_1 = CarbonCreditRetirementInfo {
+			carbon_footprint_account: bob(),
+			batch_hash: batch_hash,
+			credit_amount: BalanceOf::<Test>::from(100u32),
+			retirement_date: <mock::Test as pallet::Config>::Time::now(),
+		};
+
+		CarbonCreditRetirements::<Test>::insert(retirement_hash_1, retirement_1);
+
+		// Insert retirement (#2)
+		let retirement_hash_2 = generate_hash(fred());
+
+		let retirement_2 = CarbonCreditRetirementInfo {
+			carbon_footprint_account: charlie(),
+			batch_hash: batch_hash,
+			credit_amount: BalanceOf::<Test>::from(123u32),
+			retirement_date: <mock::Test as pallet::Config>::Time::now(),
+		};
+
+		CarbonCreditRetirements::<Test>::insert(retirement_hash_2, retirement_2);
+
+		// Insert carbon credit holdings (trader #1)
+		let credit_holdings_1 = CarbonCreditHoldingsInfo {
+			available_amount: BalanceOf::<Test>::from(100u32),
+			unavailable_amount: BalanceOf::<Test>::from(0u32),
+		};
+
+		CarbonCreditHoldings::<Test>::insert(batch_hash, dave(), credit_holdings_1);
+
+		// Insert carbon credit holdings (trader #2)
+		let credit_holdings_2 = CarbonCreditHoldingsInfo {
+			available_amount: BalanceOf::<Test>::from(0u32),
+			unavailable_amount: BalanceOf::<Test>::from(250u32),
+		};
+
+		CarbonCreditHoldings::<Test>::insert(batch_hash, fred(), credit_holdings_2);
+
+		// Insert carbon credit holdings (trader #3)
+		let credit_holdings_3 = CarbonCreditHoldingsInfo {
+			available_amount: BalanceOf::<Test>::from(300u32),
+			unavailable_amount: BalanceOf::<Test>::from(50u32),
+		};
+
+		CarbonCreditHoldings::<Test>::insert(batch_hash, george(), credit_holdings_3);
+
+		// Insert complaint for hash type
+		let complaint_ipfs = BoundedString::<IPFSLength>::truncate_from("complaint_ipfs");
+
+		let mut votes_for = BTreeSet::<AccountId>::new();
+		votes_for.insert(hank());
+
+		let complaint = ComplaintHashBasedInfo {
+			complaint_proposer: ian(),
+			complaint_type: ComplaintType::CarbonCreditBatchComplaint,
+			complaint_for: batch_hash,
+			creation_date: <mock::Test as pallet::Config>::Time::now(),
+			votes_for: votes_for,
+			votes_against: BTreeSet::<AccountIdOf<Test>>::new(),
+			complaint_active: true,
+		};
+
+		ComplaintsForHashes::<Test>::insert(complaint_ipfs.clone(), complaint);
+
+		// Successfully update complaint for hash
+		assert_ok!(Veles::update_complaint_for_hash(RuntimeOrigin::signed(alice()), complaint_ipfs.clone()));
+
+		// Check carbon credit batch
+		let batch_info = CarbonCreditBatches::<Test>::get(batch_hash).unwrap();
+
+		assert_eq!(batch_info.status, CarbonCreditBatchStatus::Redacted);
+
+		// Check carbon footprint balances
+		let carbon_footprint_account_1 = CarbonFootprintAccounts::<Test>::get(bob()).unwrap();
+
+		assert_eq!(carbon_footprint_account_1.carbon_footprint_suficit, BalanceOf::<Test>::from(0u32));
+		assert_eq!(carbon_footprint_account_1.carbon_footprint_deficit, BalanceOf::<Test>::from(50u32));
+
+		let carbon_footprint_account_2 = CarbonFootprintAccounts::<Test>::get(charlie()).unwrap();
+
+		assert_eq!(carbon_footprint_account_2.carbon_footprint_suficit, BalanceOf::<Test>::from(0u32));
+		assert_eq!(carbon_footprint_account_2.carbon_footprint_deficit, BalanceOf::<Test>::from(1123u32));
+
+		// Check debts
+		assert_eq!(ProjectOwnerDebts::<Test>::contains_key(&alice()), true);
+
+		let debts = ProjectOwnerDebts::<Test>::get(alice());
+
+		assert_eq!(debts.len(), 6);
+		assert_eq!(debts.contains_key(&bob()), true);
+		assert_eq!(debts.contains_key(&charlie()), true);
+		assert_eq!(debts.contains_key(&dave()), true);
+		assert_eq!(debts.contains_key(&fred()), true);
+		assert_eq!(debts.contains_key(&george()), true);
+		assert_eq!(debts.contains_key(&pallet_id()), true);
+
+		assert_eq!(*debts.get(&bob()).unwrap(), BalanceOf::<Test>::from(200u32));
+		assert_eq!(*debts.get(&charlie()).unwrap(), BalanceOf::<Test>::from(246u32));
+		assert_eq!(*debts.get(&dave()).unwrap(), BalanceOf::<Test>::from(200u32));
+		assert_eq!(*debts.get(&fred()).unwrap(), BalanceOf::<Test>::from(500u32));
+		assert_eq!(*debts.get(&george()).unwrap(), BalanceOf::<Test>::from(700u32));
+		assert_eq!(*debts.get(&pallet_id()).unwrap(), BalanceOf::<Test>::from(260u32));
 	});
 }

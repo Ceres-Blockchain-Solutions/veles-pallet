@@ -17,6 +17,11 @@ mod mock;
 #[cfg(test)]
 mod tests;
 
+mod benchmarking;
+
+pub mod weights;
+pub use weights::WeightInfo;
+
 /// Global data structures
 // Project Validator / Project Owner data structure
 #[derive(Encode, Decode, Default, PartialEq, Eq, scale_info::TypeInfo)]
@@ -355,6 +360,7 @@ pub mod pallet {
 		type BlockFinalizationTime: Get<u32>;
 		type Time: Time;
 		type Currency: ReservableCurrency<Self::AccountId>;
+		type WeightInfo: WeightInfo;
 
 		#[pallet::constant]
 		type UnsignedPriority: Get<TransactionPriority>;
@@ -881,7 +887,7 @@ pub mod pallet {
 	impl<T: Config> Pallet<T> {
 		// Update voting ratio
 		#[pallet::call_index(0)]
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::update_vote_pass_ratio())]
 		pub fn update_vote_pass_ratio(
 			origin: OriginFor<T>,
 			new_proportion_part: u16,
@@ -920,7 +926,7 @@ pub mod pallet {
 
 		// Update penalty levels
 		#[pallet::call_index(1)]
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::update_penalty_levels())]
 		pub fn update_penalty_levels(
 			origin: OriginFor<T>,
 			new_penalty_levels: BTreeMap<u8, BalanceOf<T>>,
@@ -967,7 +973,7 @@ pub mod pallet {
 
 		// Update beneficiary splits
 		#[pallet::call_index(2)]
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::update_beneficiary_splits())]
 		pub fn update_beneficiary_splits(
 			origin: OriginFor<T>,
 			new_beneficiary_splits: BTreeMap<u8, BalanceOf<T>>,
@@ -1012,7 +1018,7 @@ pub mod pallet {
 
 		// Update specific time value
 		#[pallet::call_index(3)]
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::update_time_value())]
 		pub fn update_time_value(
 			origin: OriginFor<T>,
 			time_type: TimeType,
@@ -1086,7 +1092,7 @@ pub mod pallet {
 
 		// Update specific fee value
 		#[pallet::call_index(4)]
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::update_fee_value())]
 		pub fn update_fee_value(
 			origin: OriginFor<T>,
 			fee_type: FeeType,
@@ -1183,7 +1189,7 @@ pub mod pallet {
 
 		// Register for a trader account
 		#[pallet::call_index(5)]
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::register_for_trader_account())]
 		pub fn register_for_trader_account(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
 			let user = ensure_signed(origin)?;
 
@@ -1224,7 +1230,7 @@ pub mod pallet {
 
 		// Register for a project validator account
 		#[pallet::call_index(6)]
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::register_for_project_validator_account())]
 		pub fn register_for_project_validator_account(
 			origin: OriginFor<T>,
 			documentation_ipfs: BoundedString<T::IPFSLength>,
@@ -1281,7 +1287,7 @@ pub mod pallet {
 
 		// Register for a project owner account
 		#[pallet::call_index(7)]
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::register_for_project_owner_account())]
 		pub fn register_for_project_owner_account(
 			origin: OriginFor<T>,
 			documentation_ipfs: BoundedString<T::IPFSLength>,
@@ -1338,7 +1344,7 @@ pub mod pallet {
 
 		// Submit carbon footprint report
 		#[pallet::call_index(8)]
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::submit_carbon_footprint_report())]
 		pub fn submit_carbon_footprint_report(
 			origin: OriginFor<T>,
 			ipfs: BoundedString<T::IPFSLength>,
@@ -1425,7 +1431,7 @@ pub mod pallet {
 
 		// Vote for/against Carbon Deficit Reports or for/against project Proposals
 		#[pallet::call_index(9)]
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::cast_vote())]
 		pub fn cast_vote(
 			origin: OriginFor<T>,
 			vote_type: VoteType,
@@ -1585,7 +1591,7 @@ pub mod pallet {
 
 		// Propose project
 		#[pallet::call_index(10)]
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::propose_project())]
 		pub fn propose_project(
 			origin: OriginFor<T>,
 			ipfs: BoundedString<T::IPFSLength>,
@@ -1673,7 +1679,7 @@ pub mod pallet {
 
 		// Propose carbon credit batch
 		#[pallet::call_index(11)]
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::propose_carbon_credit_batch())]
 		pub fn propose_carbon_credit_batch(
 			origin: OriginFor<T>,
 			project_hash: H256,
@@ -1773,7 +1779,7 @@ pub mod pallet {
 
 		// Create carbon credit sale order
 		#[pallet::call_index(12)]
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::create_sale_order())]
 		pub fn create_sale_order(
 			origin: OriginFor<T>,
 			batch_hash: H256,
@@ -1885,7 +1891,7 @@ pub mod pallet {
 
 		// Complete sale order (buy carbon credits)
 		#[pallet::call_index(13)]
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::complete_sale_order())]
 		pub fn complete_sale_order(
 			origin: OriginFor<T>,
 			sale_hash: H256,
@@ -2055,7 +2061,7 @@ pub mod pallet {
 
 		// Close carbon credit sale order
 		#[pallet::call_index(14)]
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::close_sale_order())]
 		pub fn close_sale_order(
 			origin: OriginFor<T>,
 			sale_hash: H256,
@@ -2135,7 +2141,7 @@ pub mod pallet {
 
 		// Open complaint (for AccountId entity)
 		#[pallet::call_index(15)]
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::open_account_complaint())]
 		pub fn open_account_complaint(
 			origin: OriginFor<T>,
 			documentation_ipfs: BoundedString<T::IPFSLength>,
@@ -2158,7 +2164,7 @@ pub mod pallet {
 
 			let amount_to_pay = Self::calculate_basic_payment_made_to_pallet(
 				validator.clone(),
-				PalletFeeValues::<T>::get().project_proposal_fee,
+				PalletFeeValues::<T>::get().complaint_fee,
 			);
 
 			// Check if the proposer has enough credits
@@ -2243,7 +2249,7 @@ pub mod pallet {
 
 		// Open complaint (for hash entity)
 		#[pallet::call_index(16)]
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::open_hash_complaint())]
 		pub fn open_hash_complaint(
 			origin: OriginFor<T>,
 			documentation_ipfs: BoundedString<T::IPFSLength>,
@@ -2370,7 +2376,7 @@ pub mod pallet {
 
 		// Retire carbon credits (only for CFAs)
 		#[pallet::call_index(17)]
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::retire_carbon_credits())]
 		pub fn retire_carbon_credits(
 			origin: OriginFor<T>,
 			batch_hash: H256,
@@ -2414,11 +2420,11 @@ pub mod pallet {
 			);
 
 			// Calculate actual amount to retire
-			let actual_retiring_amount =
+			let new_available_amount =
 				BalanceOf::<T>::from(holdings.available_amount - amount_to_retire);
 
 			holdings =
-				CarbonCreditHoldingsInfo { available_amount: actual_retiring_amount, ..holdings };
+				CarbonCreditHoldingsInfo { available_amount: new_available_amount, ..holdings };
 
 			// Check to see if user holdings needs to be deleted
 			if holdings.available_amount == BalanceOf::<T>::from(0u32)
@@ -2467,7 +2473,7 @@ pub mod pallet {
 			Self::deposit_event(Event::CarbonCreditsHaveBeenRetired(
 				footprint_account,
 				batch_hash,
-				actual_retiring_amount,
+				amount_to_retire,
 			));
 
 			Ok(().into())
@@ -2477,7 +2483,7 @@ pub mod pallet {
 		// Note: This extrinsic will not user the penalties to calculate the amout that
 		// 		 is needed for the repayment
 		#[pallet::call_index(18)]
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::repay_project_owner_debts())]
 		pub fn repay_project_owner_debts(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
 			let project_owner = ensure_signed(origin)?;
 
@@ -2529,7 +2535,7 @@ pub mod pallet {
 
 		// Offchain worker extrinsics
 		#[pallet::call_index(19)]
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::update_pallet_base_time())]
 		pub fn update_pallet_base_time(
 			_origin: OriginFor<T>,
 			new_pallet_base_time: BlockNumber<T>,
@@ -2552,7 +2558,7 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(20)]
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::update_carbon_footprint_report())]
 		pub fn update_carbon_footprint_report(
 			_origin: OriginFor<T>,
 			ipfs: BoundedString<T::IPFSLength>,
@@ -2663,7 +2669,7 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(21)]
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::update_project_proposal())]
 		pub fn update_project_proposal(
 			_origin: OriginFor<T>,
 			ipfs: BoundedString<T::IPFSLength>,
@@ -2703,7 +2709,7 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(22)]
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::update_carbon_credit_batch_proposal())]
 		pub fn update_carbon_credit_batch_proposal(
 			_origin: OriginFor<T>,
 			ipfs: BoundedString<T::IPFSLength>,
@@ -2761,7 +2767,7 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(23)]
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::update_carbon_credit_sale_order())]
 		pub fn update_carbon_credit_sale_order(
 			_origin: OriginFor<T>,
 			sale_hash: H256,
@@ -2796,7 +2802,7 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(24)]
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::update_complaint_for_account())]
 		pub fn update_complaint_for_account(
 			_origin: OriginFor<T>,
 			complaint: BoundedString<T::IPFSLength>,
@@ -2887,8 +2893,12 @@ pub mod pallet {
 					_ => {},
 				}
 
-				let mut penalty_timeouts =
-					PenaltyTimeoutsAccounts::<T>::get(new_timeout_block).unwrap();
+				let mut penalty_timeouts = BTreeSet::<AccountIdOf<T>>::new();
+
+				if PenaltyTimeoutsAccounts::<T>::contains_key(new_timeout_block) {
+					penalty_timeouts = PenaltyTimeoutsAccounts::<T>::get(new_timeout_block).unwrap();
+				}
+					
 				penalty_timeouts.insert(specific_complaint.clone().complaint_for);
 
 				PenaltyTimeoutsAccounts::<T>::insert(new_timeout_block, penalty_timeouts);
@@ -2902,7 +2912,7 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(25)]
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::update_complaint_for_hash())]
 		pub fn update_complaint_for_hash(
 			_origin: OriginFor<T>,
 			complaint: BoundedString<T::IPFSLength>,
@@ -2981,8 +2991,12 @@ pub mod pallet {
 					_ => {},
 				}
 
-				let mut penalty_timeouts =
-					PenaltyTimeoutsHashes::<T>::get(new_timeout_block).unwrap();
+				let mut penalty_timeouts = BTreeSet::<H256>::new();
+
+				if PenaltyTimeoutsHashes::<T>::contains_key(new_timeout_block) {
+					penalty_timeouts = PenaltyTimeoutsHashes::<T>::get(new_timeout_block).unwrap();
+				}
+					
 				penalty_timeouts.insert(specific_complaint.clone().complaint_for);
 
 				PenaltyTimeoutsHashes::<T>::insert(new_timeout_block, penalty_timeouts);
@@ -2996,7 +3010,7 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(26)]
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::update_project_owner_penalty_level())]
 		pub fn update_project_owner_penalty_level(
 			_origin: OriginFor<T>,
 			account_id: AccountIdOf<T>,
@@ -3027,7 +3041,7 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(27)]
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::update_validator_penalty_level())]
 		pub fn update_validator_penalty_level(
 			_origin: OriginFor<T>,
 			account_id: AccountIdOf<T>,
@@ -3058,7 +3072,7 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(28)]
-		#[pallet::weight(0)]
+		#[pallet::weight(<T as Config>::WeightInfo::update_project_penalty_level())]
 		pub fn update_project_penalty_level(_origin: OriginFor<T>, hash: H256) -> DispatchResult {
 			let mut project = Projects::<T>::get(hash).unwrap();
 
@@ -3205,7 +3219,7 @@ pub mod pallet {
 					info!("👷 Offchain worker: Successfully updated base pallet time");
 				}
 			}
-			
+
 			// Check if any complaint timeout event has occured
 			if ComplaintTimeouts::<T>::contains_key(now) {
 				let complaint_events = ComplaintTimeouts::<T>::get(now).unwrap();
@@ -3632,6 +3646,8 @@ pub mod pallet {
 					}
 				}
 			}
+
+			ProjectOwnerDebts::<T>::insert(project_info.project_owner, debts);
 		}
 
 		// Check if vote has passed
