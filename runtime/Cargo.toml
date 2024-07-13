@@ -118,6 +118,7 @@ std = [
 	"sp-version/std",
 
 	"substrate-wasm-builder",
+	"pallet-veles/std"
 ]
 
 runtime-benchmarks = [
@@ -130,6 +131,7 @@ runtime-benchmarks = [
 	"pallet-sudo/runtime-benchmarks",
 	"pallet-timestamp/runtime-benchmarks",
 	"sp-runtime/runtime-benchmarks",
+	"pallet-veles/runtime-benchmarks",
 ]
 
 try-runtime = [
@@ -144,6 +146,7 @@ try-runtime = [
 	"pallet-timestamp/try-runtime",
 	"pallet-transaction-payment/try-runtime",
 	"sp-runtime/try-runtime",
+	"pallet-veles/try-runtime",
 ]
 
 experimental = ["pallet-aura/experimental"]
