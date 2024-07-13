@@ -1135,7 +1135,6 @@ pub mod pallet {
 					pallet_fees =
 						FeeValues { project_owner_account_fee: new_fee_value, ..pallet_fees };
 				},
-				// TODO: Change name to Carbon footpring report
 				FeeType::CarbonFootprintReportFee => {
 					ensure!(
 						new_fee_value != pallet_fees.carbon_footprint_report_fee,
