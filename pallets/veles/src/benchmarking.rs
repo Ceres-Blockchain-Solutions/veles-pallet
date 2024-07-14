@@ -242,13 +242,13 @@ benchmarks! {
 
 		let user = alice::<T>();
 		let documentation_ipfs = BoundedString::<T::IPFSLength>::truncate_from("documentation_ipfs");
-		let carbon_footprint_suficit = BalanceOf::<T>::from(100u32);
+		let carbon_footprint_surplus = BalanceOf::<T>::from(100u32);
 		let carbon_footprint_deficit = BalanceOf::<T>::from(0u32);
 	} : {
 		Veles::<T>::submit_carbon_footprint_report(
 			RawOrigin::Signed(user.clone()).into(),
 			documentation_ipfs.clone(),
-			carbon_footprint_suficit,
+			carbon_footprint_surplus,
 			carbon_footprint_deficit,
 		).unwrap();
 	} verify {
@@ -753,7 +753,7 @@ benchmarks! {
 
 		let carbon_footprint_account = CarbonFootprintAccountInfo {
 			documentation_ipfses: documentation_ipfses.clone(),
-			carbon_footprint_suficit: BalanceOf::<T>::from(0u32),
+			carbon_footprint_surplus: BalanceOf::<T>::from(0u32),
 			carbon_footprint_deficit: BalanceOf::<T>::from(1000u32),
 			creation_date: T::Time::now(),
 		};
@@ -848,7 +848,7 @@ benchmarks! {
 
 		let cf_account = CarbonFootprintAccountInfo {
 			documentation_ipfses: documentation_ipfses,
-			carbon_footprint_suficit: BalanceOf::<T>::from(50u32),
+			carbon_footprint_surplus: BalanceOf::<T>::from(50u32),
 			carbon_footprint_deficit: BalanceOf::<T>::from(0u32),
 			creation_date: T::Time::now(),
 		};
@@ -861,7 +861,7 @@ benchmarks! {
 		let report_info = CarbonFootprintReportInfo {
 			cf_account: alice::<T>(),
 			creation_date: T::Time::now(),
-			carbon_footprint_suficit: BalanceOf::<T>::from(0u32),
+			carbon_footprint_surplus: BalanceOf::<T>::from(0u32),
 			carbon_footprint_deficit: BalanceOf::<T>::from(100u32),
 			votes_for: BTreeSet::<AccountIdOf<T>>::new(),
 			votes_against: BTreeSet::<AccountIdOf<T>>::new(),
@@ -1091,7 +1091,7 @@ benchmarks! {
 
 		let carbon_footprint_account_1 = CarbonFootprintAccountInfo {
 			documentation_ipfses: documentation_ipfses_1,
-			carbon_footprint_suficit: BalanceOf::<T>::from(50u32),
+			carbon_footprint_surplus: BalanceOf::<T>::from(50u32),
 			carbon_footprint_deficit: BalanceOf::<T>::from(0u32),
 			creation_date: T::Time::now(),
 		};
@@ -1105,7 +1105,7 @@ benchmarks! {
 
 		let carbon_footprint_account_2 = CarbonFootprintAccountInfo {
 			documentation_ipfses: documentation_ipfses_2,
-			carbon_footprint_suficit: BalanceOf::<T>::from(0u32),
+			carbon_footprint_surplus: BalanceOf::<T>::from(0u32),
 			carbon_footprint_deficit: BalanceOf::<T>::from(1000u32),
 			creation_date: T::Time::now(),
 		};

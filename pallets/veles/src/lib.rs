@@ -43,8 +43,8 @@ pub struct ProjectValidatorOrProjectOwnerInfo<IPFSLength: Get<u32>, BlockNumber>
 pub struct CarbonFootprintAccountInfo<MomentOf, IPFSLength: Get<u32>, BalanceOf> {
 	// IPFS links to CFA documentation
 	documentation_ipfses: BTreeSet<BoundedString<IPFSLength>>,
-	// Carbon footprint suficit
-	carbon_footprint_suficit: BalanceOf,
+	// Carbon footprint surplus
+	carbon_footprint_surplus: BalanceOf,
 	// Carbon footprint deficit
 	carbon_footprint_deficit: BalanceOf,
 	// Creation date
@@ -59,8 +59,8 @@ pub struct CarbonFootprintReportInfo<AccountIdOf, MomentOf, BalanceOf> {
 	cf_account: AccountIdOf,
 	// Creation date
 	creation_date: MomentOf,
-	// Carbon footprint suficit
-	carbon_footprint_suficit: BalanceOf,
+	// Carbon footprint surplus
+	carbon_footprint_surplus: BalanceOf,
 	// Carbon footprint deficit
 	carbon_footprint_deficit: BalanceOf,
 	// Votes for
@@ -1347,14 +1347,14 @@ pub mod pallet {
 		pub fn submit_carbon_footprint_report(
 			origin: OriginFor<T>,
 			ipfs: BoundedString<T::IPFSLength>,
-			carbon_footprint_suficit: BalanceOf<T>,
+			carbon_footprint_surplus: BalanceOf<T>,
 			carbon_footprint_deficit: BalanceOf<T>,
 		) -> DispatchResultWithPostInfo {
 			let user = ensure_signed(origin)?;
 
 			// Check if user has submitted valid report values
 			ensure!(
-				(carbon_footprint_suficit == BalanceOf::<T>::from(0u32))
+				(carbon_footprint_surplus == BalanceOf::<T>::from(0u32))
 					^ (carbon_footprint_deficit == BalanceOf::<T>::from(0u32)),
 				Error::<T>::InvalidCarbonFootprintValues
 			);
@@ -1391,7 +1391,7 @@ pub mod pallet {
 				cf_account: user.clone(),
 				creation_date,
 				carbon_footprint_deficit,
-				carbon_footprint_suficit,
+				carbon_footprint_surplus,
 				votes_for: BTreeSet::<AccountIdOf<T>>::new(),
 				votes_against: BTreeSet::<AccountIdOf<T>>::new(),
 				voting_active: true,
@@ -2442,7 +2442,7 @@ pub mod pallet {
 				let difference = amount_to_retire - footprint_info.carbon_footprint_deficit;
 
 				footprint_info = CarbonFootprintAccountInfo {
-					carbon_footprint_suficit: footprint_info.carbon_footprint_suficit + difference,
+					carbon_footprint_surplus: footprint_info.carbon_footprint_surplus + difference,
 					carbon_footprint_deficit: BalanceOf::<T>::from(0u32),
 					..footprint_info
 				};
@@ -2577,7 +2577,7 @@ pub mod pallet {
 				// Create an empty carbon footprint account
 				let mut new_account = CarbonFootprintAccountInfo {
 					documentation_ipfses,
-					carbon_footprint_suficit: report.carbon_footprint_suficit,
+					carbon_footprint_surplus: report.carbon_footprint_surplus,
 					carbon_footprint_deficit: report.carbon_footprint_deficit,
 					creation_date: T::Time::now(),
 				};
@@ -2592,49 +2592,49 @@ pub mod pallet {
 					new_documentation.insert(ipfs.clone());
 
 					// Update the carbon footprint account structure
-					if report.carbon_footprint_suficit == BalanceOf::<T>::from(0u32) {
-						if report.carbon_footprint_deficit >= old_account.carbon_footprint_suficit {
+					if report.carbon_footprint_surplus == BalanceOf::<T>::from(0u32) {
+						if report.carbon_footprint_deficit >= old_account.carbon_footprint_surplus {
 							let change_amount = report.carbon_footprint_deficit
-								- old_account.carbon_footprint_suficit;
+								- old_account.carbon_footprint_surplus;
 
 							new_account = CarbonFootprintAccountInfo {
 								documentation_ipfses: new_documentation,
-								carbon_footprint_suficit: BalanceOf::<T>::from(0u32),
+								carbon_footprint_surplus: BalanceOf::<T>::from(0u32),
 								carbon_footprint_deficit: old_account.carbon_footprint_deficit
 									+ change_amount,
 								creation_date: old_account.creation_date,
 							};
 						} else {
-							let change_amount = report.carbon_footprint_suficit
+							let change_amount = report.carbon_footprint_surplus
 								- new_account.carbon_footprint_deficit;
 
 							new_account = CarbonFootprintAccountInfo {
 								documentation_ipfses: new_documentation,
-								carbon_footprint_suficit: old_account.carbon_footprint_suficit
+								carbon_footprint_surplus: old_account.carbon_footprint_surplus
 									+ change_amount,
 								carbon_footprint_deficit: BalanceOf::<T>::from(0u32),
 								creation_date: old_account.creation_date,
 							};
 						}
 					} else {
-						if report.carbon_footprint_suficit >= old_account.carbon_footprint_deficit {
-							let change_amount = report.carbon_footprint_suficit
+						if report.carbon_footprint_surplus >= old_account.carbon_footprint_deficit {
+							let change_amount = report.carbon_footprint_surplus
 								- old_account.carbon_footprint_deficit;
 
 							new_account = CarbonFootprintAccountInfo {
 								documentation_ipfses: new_documentation,
-								carbon_footprint_suficit: old_account.carbon_footprint_suficit
+								carbon_footprint_surplus: old_account.carbon_footprint_surplus
 									+ change_amount,
 								carbon_footprint_deficit: BalanceOf::<T>::from(0u32),
 								creation_date: old_account.creation_date,
 							};
 						} else {
 							let change_amount =
-								report.carbon_footprint_deficit - report.carbon_footprint_suficit;
+								report.carbon_footprint_deficit - report.carbon_footprint_surplus;
 
 							new_account = CarbonFootprintAccountInfo {
 								documentation_ipfses: new_documentation,
-								carbon_footprint_suficit: BalanceOf::<T>::from(0u32),
+								carbon_footprint_surplus: BalanceOf::<T>::from(0u32),
 								carbon_footprint_deficit: old_account.carbon_footprint_deficit
 									+ change_amount,
 								creation_date: old_account.creation_date,
@@ -2652,7 +2652,7 @@ pub mod pallet {
 			let new_report = CarbonFootprintReportInfo {
 				cf_account: report.cf_account.clone(),
 				creation_date: report.creation_date,
-				carbon_footprint_suficit: report.carbon_footprint_suficit,
+				carbon_footprint_surplus: report.carbon_footprint_surplus,
 				carbon_footprint_deficit: report.carbon_footprint_deficit,
 				votes_for: report.votes_for,
 				votes_against: report.votes_against,
@@ -3574,19 +3574,19 @@ pub mod pallet {
 					)
 					.unwrap();
 
-					if retirement_info.credit_amount >= footprint_account.carbon_footprint_suficit {
+					if retirement_info.credit_amount >= footprint_account.carbon_footprint_surplus {
 						let change = retirement_info.credit_amount
-							- footprint_account.carbon_footprint_suficit;
+							- footprint_account.carbon_footprint_surplus;
 
 						footprint_account = CarbonFootprintAccountInfo {
-							carbon_footprint_suficit: BalanceOf::<T>::from(0u32),
+							carbon_footprint_surplus: BalanceOf::<T>::from(0u32),
 							carbon_footprint_deficit: footprint_account.carbon_footprint_deficit
 								+ change,
 							..footprint_account
 						};
 					} else {
 						footprint_account = CarbonFootprintAccountInfo {
-							carbon_footprint_suficit: footprint_account.carbon_footprint_suficit
+							carbon_footprint_surplus: footprint_account.carbon_footprint_surplus
 								- retirement_info.credit_amount,
 							..footprint_account
 						};

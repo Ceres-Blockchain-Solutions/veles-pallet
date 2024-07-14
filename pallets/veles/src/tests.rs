@@ -877,7 +877,7 @@ fn register_for_trader_account_user_is_active_in_carbon_footprint_report_voting_
 		let carbon_footprint_report = CarbonFootprintReportInfo {
 			cf_account: alice(),
 			creation_date: <mock::Test as pallet::Config>::Time::now(),
-			carbon_footprint_suficit: BalanceOf::<Test>::from(0u32),
+			carbon_footprint_surplus: BalanceOf::<Test>::from(0u32),
 			carbon_footprint_deficit: BalanceOf::<Test>::from(0u32),
 			votes_for: BTreeSet::<AccountId>::new(),
 			votes_against: BTreeSet::<AccountId>::new(),
@@ -965,7 +965,7 @@ fn register_for_project_validator_account_user_is_active_in_carbon_footprint_rep
 		let carbon_footprint_report = CarbonFootprintReportInfo {
 			cf_account: alice(),
 			creation_date: <mock::Test as pallet::Config>::Time::now(),
-			carbon_footprint_suficit: BalanceOf::<Test>::from(0u32),
+			carbon_footprint_surplus: BalanceOf::<Test>::from(0u32),
 			carbon_footprint_deficit: BalanceOf::<Test>::from(0u32),
 			votes_for: BTreeSet::<AccountId>::new(),
 			votes_against: BTreeSet::<AccountId>::new(),
@@ -1098,7 +1098,7 @@ fn register_for_project_owner_account_user_is_active_in_carbon_footprint_report_
 		let carbon_footprint_report = CarbonFootprintReportInfo {
 			cf_account: alice(),
 			creation_date: <mock::Test as pallet::Config>::Time::now(),
-			carbon_footprint_suficit: BalanceOf::<Test>::from(0u32),
+			carbon_footprint_surplus: BalanceOf::<Test>::from(0u32),
 			carbon_footprint_deficit: BalanceOf::<Test>::from(0u32),
 			votes_for: BTreeSet::<AccountId>::new(),
 			votes_against: BTreeSet::<AccountId>::new(),
@@ -1208,7 +1208,7 @@ fn submit_carbon_footprint_report_invalid_carbon_footprint_values() {
 		TraderAccounts::<Test>::set(new_traders);
 
 		let documentation_ipfs = BoundedString::<IPFSLength>::truncate_from("documentation_ipfs");
-		let carbon_footprint_suficit = BalanceOf::<Test>::from(0u32);
+		let carbon_footprint_surplus = BalanceOf::<Test>::from(0u32);
 		let carbon_footprint_deficit = BalanceOf::<Test>::from(0u32);
 
 		// Check for InvalidCarbonFootprintValues error
@@ -1216,7 +1216,7 @@ fn submit_carbon_footprint_report_invalid_carbon_footprint_values() {
 			Veles::submit_carbon_footprint_report(
 				RuntimeOrigin::signed(alice()),
 				documentation_ipfs,
-				carbon_footprint_suficit,
+				carbon_footprint_surplus,
 				carbon_footprint_deficit,
 			),
 			Error::<Test>::InvalidCarbonFootprintValues
@@ -1236,7 +1236,7 @@ fn submit_carbon_footprint_report_account_id_already_in_use() {
 		TraderAccounts::<Test>::set(new_traders);
 
 		let documentation_ipfs = BoundedString::<IPFSLength>::truncate_from("documentation_ipfs");
-		let carbon_footprint_suficit = BalanceOf::<Test>::from(0u32);
+		let carbon_footprint_surplus = BalanceOf::<Test>::from(0u32);
 		let carbon_footprint_deficit = BalanceOf::<Test>::from(10u32);
 
 		// Check for AccountIdAlreadyInUse error
@@ -1244,7 +1244,7 @@ fn submit_carbon_footprint_report_account_id_already_in_use() {
 			Veles::submit_carbon_footprint_report(
 				RuntimeOrigin::signed(alice()),
 				documentation_ipfs,
-				carbon_footprint_suficit,
+				carbon_footprint_surplus,
 				carbon_footprint_deficit,
 			),
 			Error::<Test>::AccountIdAlreadyInUse
@@ -1263,7 +1263,7 @@ fn submit_carbon_footprint_report_user_is_active_in_carbon_footprint_report_voti
 		let carbon_footprint_report = CarbonFootprintReportInfo {
 			cf_account: alice(),
 			creation_date: <mock::Test as pallet::Config>::Time::now(),
-			carbon_footprint_suficit: BalanceOf::<Test>::from(0u32),
+			carbon_footprint_surplus: BalanceOf::<Test>::from(0u32),
 			carbon_footprint_deficit: BalanceOf::<Test>::from(10u32),
 			votes_for: BTreeSet::<AccountId>::new(),
 			votes_against: BTreeSet::<AccountId>::new(),
@@ -1272,7 +1272,7 @@ fn submit_carbon_footprint_report_user_is_active_in_carbon_footprint_report_voti
 
 		CarbonFootprintReports::<Test>::insert(documentation_ipfs.clone(), carbon_footprint_report);
 
-		let carbon_footprint_suficit = BalanceOf::<Test>::from(0u32);
+		let carbon_footprint_surplus = BalanceOf::<Test>::from(0u32);
 		let carbon_footprint_deficit = BalanceOf::<Test>::from(10u32);
 
 		// Check for CarbonFootprintReportAlreadySubmitted error
@@ -1280,7 +1280,7 @@ fn submit_carbon_footprint_report_user_is_active_in_carbon_footprint_report_voti
 			Veles::submit_carbon_footprint_report(
 				RuntimeOrigin::signed(alice()),
 				documentation_ipfs,
-				carbon_footprint_suficit,
+				carbon_footprint_surplus,
 				carbon_footprint_deficit,
 			),
 			Error::<Test>::CarbonFootprintReportAlreadySubmitted
@@ -1305,7 +1305,7 @@ fn submit_carbon_footprint_report_documentation_was_used_previously() {
 
 		Validators::<Test>::insert(bob(), validator);
 
-		let carbon_footprint_suficit = BalanceOf::<Test>::from(0u32);
+		let carbon_footprint_surplus = BalanceOf::<Test>::from(0u32);
 		let carbon_footprint_deficit = BalanceOf::<Test>::from(10u32);
 
 		// Check for DocumentationWasUsedPreviously error
@@ -1313,7 +1313,7 @@ fn submit_carbon_footprint_report_documentation_was_used_previously() {
 			Veles::submit_carbon_footprint_report(
 				RuntimeOrigin::signed(alice()),
 				documentation_ipfs,
-				carbon_footprint_suficit,
+				carbon_footprint_surplus,
 				carbon_footprint_deficit,
 			),
 			Error::<Test>::DocumentationWasUsedPreviously
@@ -1329,7 +1329,7 @@ fn submit_carbon_footprint_report_insufficient_funds() {
 
 		let documentation_ipfs = BoundedString::<IPFSLength>::truncate_from("documentation_ipfs");
 
-		let carbon_footprint_suficit = BalanceOf::<Test>::from(0u32);
+		let carbon_footprint_surplus = BalanceOf::<Test>::from(0u32);
 		let carbon_footprint_deficit = BalanceOf::<Test>::from(10u32);
 
 		// Check for InsufficientFunds error
@@ -1337,7 +1337,7 @@ fn submit_carbon_footprint_report_insufficient_funds() {
 			Veles::submit_carbon_footprint_report(
 				RuntimeOrigin::signed(alice()),
 				documentation_ipfs,
-				carbon_footprint_suficit,
+				carbon_footprint_surplus,
 				carbon_footprint_deficit,
 			),
 			Error::<Test>::InsufficientFunds
@@ -1353,7 +1353,7 @@ fn submit_carbon_footprint_report_ok() {
 
 		let documentation_ipfs = BoundedString::<IPFSLength>::truncate_from("documentation_ipfs");
 
-		let carbon_footprint_suficit = BalanceOf::<Test>::from(0u32);
+		let carbon_footprint_surplus = BalanceOf::<Test>::from(0u32);
 		let carbon_footprint_deficit = BalanceOf::<Test>::from(10u32);
 
 		// Check balances before extrinsic call
@@ -1364,7 +1364,7 @@ fn submit_carbon_footprint_report_ok() {
 		assert_ok!(Veles::submit_carbon_footprint_report(
 			RuntimeOrigin::signed(charlie()),
 			documentation_ipfs.clone(),
-			carbon_footprint_suficit,
+			carbon_footprint_surplus,
 			carbon_footprint_deficit,
 		));
 
@@ -1373,7 +1373,7 @@ fn submit_carbon_footprint_report_ok() {
 
 		assert_eq!(report.cf_account, charlie());
 		assert_eq!(report.creation_date, <mock::Test as pallet::Config>::Time::now());
-		assert_eq!(report.carbon_footprint_suficit, BalanceOf::<Test>::from(0u32));
+		assert_eq!(report.carbon_footprint_surplus, BalanceOf::<Test>::from(0u32));
 		assert_eq!(report.carbon_footprint_deficit, BalanceOf::<Test>::from(10u32));
 		assert_eq!(report.votes_for, BTreeSet::<AccountIdOf<Test>>::new());
 		assert_eq!(report.votes_against, BTreeSet::<AccountIdOf<Test>>::new());
@@ -1491,7 +1491,7 @@ fn cast_vote_carbon_footprint_report_vote_voting_cycle_is_over() {
 		let report = CarbonFootprintReportInfo {
 			cf_account: alice(),
 			creation_date: <mock::Test as pallet::Config>::Time::now(),
-			carbon_footprint_suficit: BalanceOf::<Test>::from(0u32),
+			carbon_footprint_surplus: BalanceOf::<Test>::from(0u32),
 			carbon_footprint_deficit: BalanceOf::<Test>::from(0u32),
 			votes_for: BTreeSet::<AccountId>::new(),
 			votes_against: BTreeSet::<AccountId>::new(),
@@ -1538,7 +1538,7 @@ fn cast_vote_carbon_footprint_report_ok() {
 		let report = CarbonFootprintReportInfo {
 			cf_account: alice(),
 			creation_date: <mock::Test as pallet::Config>::Time::now(),
-			carbon_footprint_suficit: BalanceOf::<Test>::from(0u32),
+			carbon_footprint_surplus: BalanceOf::<Test>::from(0u32),
 			carbon_footprint_deficit: BalanceOf::<Test>::from(0u32),
 			votes_for: BTreeSet::<AccountId>::new(),
 			votes_against: BTreeSet::<AccountId>::new(),
@@ -1565,7 +1565,7 @@ fn cast_vote_carbon_footprint_report_ok() {
 
 		assert_eq!(report.cf_account, alice());
 		assert_eq!(report.creation_date, <mock::Test as pallet::Config>::Time::now());
-		assert_eq!(report.carbon_footprint_suficit, BalanceOf::<Test>::from(0u32));
+		assert_eq!(report.carbon_footprint_surplus, BalanceOf::<Test>::from(0u32));
 		assert_eq!(report.carbon_footprint_deficit, BalanceOf::<Test>::from(0u32));
 		assert_eq!(report.votes_for.len(), 1);
 		assert_eq!(report.votes_for.contains(&charlie()), true);
@@ -1603,7 +1603,7 @@ fn cast_vote_carbon_footprint_report_vote_already_submitted() {
 		let report = CarbonFootprintReportInfo {
 			cf_account: alice(),
 			creation_date: <mock::Test as pallet::Config>::Time::now(),
-			carbon_footprint_suficit: BalanceOf::<Test>::from(0u32),
+			carbon_footprint_surplus: BalanceOf::<Test>::from(0u32),
 			carbon_footprint_deficit: BalanceOf::<Test>::from(0u32),
 			votes_for: BTreeSet::<AccountId>::new(),
 			votes_against: BTreeSet::<AccountId>::new(),
@@ -4987,7 +4987,7 @@ fn retire_carbon_credits_carbon_credit_batch_does_not_exist() {
 
 		let carbon_footprint_account = CarbonFootprintAccountInfo {
 			documentation_ipfses,
-			carbon_footprint_suficit: BalanceOf::<Test>::from(0u32),
+			carbon_footprint_surplus: BalanceOf::<Test>::from(0u32),
 			carbon_footprint_deficit: BalanceOf::<Test>::from(1000u32),
 			creation_date: <mock::Test as pallet::Config>::Time::now(),
 		};
@@ -5024,7 +5024,7 @@ fn retire_carbon_credits_carbon_credit_batch_is_not_active() {
 
 		let carbon_footprint_account = CarbonFootprintAccountInfo {
 			documentation_ipfses,
-			carbon_footprint_suficit: BalanceOf::<Test>::from(0u32),
+			carbon_footprint_surplus: BalanceOf::<Test>::from(0u32),
 			carbon_footprint_deficit: BalanceOf::<Test>::from(1000u32),
 			creation_date: <mock::Test as pallet::Config>::Time::now(),
 		};
@@ -5078,7 +5078,7 @@ fn retire_carbon_credits_carbon_credit_holdings_dont_exist() {
 
 		let carbon_footprint_account = CarbonFootprintAccountInfo {
 			documentation_ipfses,
-			carbon_footprint_suficit: BalanceOf::<Test>::from(0u32),
+			carbon_footprint_surplus: BalanceOf::<Test>::from(0u32),
 			carbon_footprint_deficit: BalanceOf::<Test>::from(1000u32),
 			creation_date: <mock::Test as pallet::Config>::Time::now(),
 		};
@@ -5132,7 +5132,7 @@ fn retire_carbon_credits_not_enought_available_credits() {
 
 		let carbon_footprint_account = CarbonFootprintAccountInfo {
 			documentation_ipfses,
-			carbon_footprint_suficit: BalanceOf::<Test>::from(0u32),
+			carbon_footprint_surplus: BalanceOf::<Test>::from(0u32),
 			carbon_footprint_deficit: BalanceOf::<Test>::from(1000u32),
 			creation_date: <mock::Test as pallet::Config>::Time::now(),
 		};
@@ -5194,7 +5194,7 @@ fn retire_carbon_credits_ok() {
 
 		let carbon_footprint_account = CarbonFootprintAccountInfo {
 			documentation_ipfses: documentation_ipfses.clone(),
-			carbon_footprint_suficit: BalanceOf::<Test>::from(0u32),
+			carbon_footprint_surplus: BalanceOf::<Test>::from(0u32),
 			carbon_footprint_deficit: BalanceOf::<Test>::from(1000u32),
 			creation_date: <mock::Test as pallet::Config>::Time::now(),
 		};
@@ -5247,7 +5247,7 @@ fn retire_carbon_credits_ok() {
 
 		assert_eq!(carbon_footprint_account.documentation_ipfses, documentation_ipfses);
 		assert_eq!(
-			carbon_footprint_account.carbon_footprint_suficit,
+			carbon_footprint_account.carbon_footprint_surplus,
 			BalanceOf::<Test>::from(0u32)
 		);
 		assert_eq!(
@@ -5432,7 +5432,7 @@ pub fn update_carbon_footprint_report_new_account_ok() {
 		let report_info = CarbonFootprintReportInfo {
 			cf_account: alice(),
 			creation_date: <mock::Test as pallet::Config>::Time::now(),
-			carbon_footprint_suficit: BalanceOf::<Test>::from(0u32),
+			carbon_footprint_surplus: BalanceOf::<Test>::from(0u32),
 			carbon_footprint_deficit: BalanceOf::<Test>::from(100u32),
 			votes_for: BTreeSet::<AccountId>::new(),
 			votes_against: BTreeSet::<AccountId>::new(),
@@ -5455,7 +5455,7 @@ pub fn update_carbon_footprint_report_new_account_ok() {
 		let account = CarbonFootprintAccounts::<Test>::get(alice()).unwrap();
 
 		assert_eq!(account.documentation_ipfses.contains(&report_ipfs), true);
-		assert_eq!(account.carbon_footprint_suficit, 0);
+		assert_eq!(account.carbon_footprint_surplus, 0);
 		assert_eq!(account.carbon_footprint_deficit, 100);
 		assert_eq!(account.creation_date, <mock::Test as pallet::Config>::Time::now());
 	});
@@ -5471,7 +5471,7 @@ pub fn update_carbon_footprint_report_old_account_ok() {
 
 		let cf_account = CarbonFootprintAccountInfo {
 			documentation_ipfses: documentation_ipfses,
-			carbon_footprint_suficit: BalanceOf::<Test>::from(50u32),
+			carbon_footprint_surplus: BalanceOf::<Test>::from(50u32),
 			carbon_footprint_deficit: BalanceOf::<Test>::from(0u32),
 			creation_date: <mock::Test as pallet::Config>::Time::now(),
 		};
@@ -5485,7 +5485,7 @@ pub fn update_carbon_footprint_report_old_account_ok() {
 		let report_info = CarbonFootprintReportInfo {
 			cf_account: alice(),
 			creation_date: <mock::Test as pallet::Config>::Time::now(),
-			carbon_footprint_suficit: BalanceOf::<Test>::from(0u32),
+			carbon_footprint_surplus: BalanceOf::<Test>::from(0u32),
 			carbon_footprint_deficit: BalanceOf::<Test>::from(100u32),
 			votes_for: BTreeSet::<AccountId>::new(),
 			votes_against: BTreeSet::<AccountId>::new(),
@@ -5509,7 +5509,7 @@ pub fn update_carbon_footprint_report_old_account_ok() {
 
 		assert_eq!(account.documentation_ipfses.contains(&report_1_ipfs), true);
 		assert_eq!(account.documentation_ipfses.contains(&report_2_ipfs), true);
-		assert_eq!(account.carbon_footprint_suficit, 0);
+		assert_eq!(account.carbon_footprint_surplus, 0);
 		assert_eq!(account.carbon_footprint_deficit, 50);
 		assert_eq!(account.creation_date, <mock::Test as pallet::Config>::Time::now());
 	});
@@ -6233,7 +6233,7 @@ pub fn update_complaint_for_hash_carbon_credit_batch_ok() {
 
 		let carbon_footprint_account_1 = CarbonFootprintAccountInfo {
 			documentation_ipfses: documentation_ipfses_1,
-			carbon_footprint_suficit: BalanceOf::<Test>::from(50u32),
+			carbon_footprint_surplus: BalanceOf::<Test>::from(50u32),
 			carbon_footprint_deficit: BalanceOf::<Test>::from(0u32),
 			creation_date: <mock::Test as pallet::Config>::Time::now(),
 		};
@@ -6248,7 +6248,7 @@ pub fn update_complaint_for_hash_carbon_credit_batch_ok() {
 
 		let carbon_footprint_account_2 = CarbonFootprintAccountInfo {
 			documentation_ipfses: documentation_ipfses_2,
-			carbon_footprint_suficit: BalanceOf::<Test>::from(0u32),
+			carbon_footprint_surplus: BalanceOf::<Test>::from(0u32),
 			carbon_footprint_deficit: BalanceOf::<Test>::from(1000u32),
 			creation_date: <mock::Test as pallet::Config>::Time::now(),
 		};
@@ -6332,12 +6332,12 @@ pub fn update_complaint_for_hash_carbon_credit_batch_ok() {
 		// Check carbon footprint balances
 		let carbon_footprint_account_1 = CarbonFootprintAccounts::<Test>::get(bob()).unwrap();
 
-		assert_eq!(carbon_footprint_account_1.carbon_footprint_suficit, BalanceOf::<Test>::from(0u32));
+		assert_eq!(carbon_footprint_account_1.carbon_footprint_surplus, BalanceOf::<Test>::from(0u32));
 		assert_eq!(carbon_footprint_account_1.carbon_footprint_deficit, BalanceOf::<Test>::from(50u32));
 
 		let carbon_footprint_account_2 = CarbonFootprintAccounts::<Test>::get(charlie()).unwrap();
 
-		assert_eq!(carbon_footprint_account_2.carbon_footprint_suficit, BalanceOf::<Test>::from(0u32));
+		assert_eq!(carbon_footprint_account_2.carbon_footprint_surplus, BalanceOf::<Test>::from(0u32));
 		assert_eq!(carbon_footprint_account_2.carbon_footprint_deficit, BalanceOf::<Test>::from(1123u32));
 
 		// Check debts
