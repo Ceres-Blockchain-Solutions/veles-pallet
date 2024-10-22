@@ -1,6 +1,5 @@
 # Substrate filess
 target/
-Cargo.lock
 
 # Zombienet files
 polkadot
